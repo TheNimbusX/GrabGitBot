@@ -9,6 +9,7 @@ use App\Enums\FitnessGoal;
 use App\Enums\Gender;
 use App\Enums\OnboardingStep;
 use App\Enums\PhotoType;
+use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\Photo;
 use App\Models\User;
@@ -64,10 +65,11 @@ class FitBotService
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
                 '/rating' => $this->cmdRating($user, $chatId),
+                '/plan' => $this->cmdPlan($user, $chatId),
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    'Неизвестная команда. Команды: /start, /check, /rating, /settings (или /настройки)',
+                    '🤔 Неизвестная команда. Доступны: /start, /check, /rating, /plan, /settings',
                     $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
                 ),
             };
@@ -87,14 +89,21 @@ class FitBotService
                 match ($menuAction) {
                     'check' => $this->cmdCheck($user, $chatId),
                     'rating' => $this->cmdRating($user, $chatId),
+                    'plan' => $this->cmdPlan($user, $chatId),
                     'settings' => $this->cmdSettings($user, $chatId),
                     'plan_ai' => $this->telegram->sendMessage(
                         $chatId,
-                        'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
+                        '🤖 Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
                         $this->mainMenuKeyboard()
                     ),
                 };
 
+                return;
+            }
+        }
+
+        if ($text !== '' && $user->hasCompletedOnboarding()) {
+            if ($this->tryConsumeCheckQuantityReply($user, $chatId, $text)) {
                 return;
             }
         }
@@ -122,7 +131,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Выбери действие кнопками внизу или команды: /check, /rating, /settings',
+                '👇 Выбери действие кнопками внизу или команды: /check, /rating, /plan, /settings',
                 $this->mainMenuKeyboard()
             );
         }
@@ -156,6 +165,12 @@ class FitBotService
 
         if ($data === 'menu:settings') {
             $this->cmdSettings($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'menu:plan') {
+            $this->cmdPlan($user, $chatId);
 
             return;
         }
@@ -194,7 +209,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Снова привет! Я FitBot — держим питание, сон, тренировки и воду под контролем.',
+                '👋 Снова привет! Я <b>FitBot</b> — держим питание 😋, сон 😴, тренировки 💪 и воду 💧 под контролем.',
                 $this->mainMenuKeyboard()
             );
 
@@ -280,7 +295,18 @@ class FitBotService
         }
 
         $text = $this->rating->formatSummaryMessage($user);
-        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard(), null);
+        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
+    }
+
+    private function cmdPlan(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, '⏳ Сначала заверши онбординг: /start');
+
+            return;
+        }
+
+        $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user), $this->mainMenuKeyboard());
     }
 
     private function cmdSettings(User $user, int $chatId): void
@@ -288,11 +314,10 @@ class FitBotService
         // Без HTML: иначе при ошибке разбора сущностей Telegram отвечает ok=false при HTTP 200 — сообщение не уходит.
         $this->telegram->sendMessage(
             $chatId,
-            "⚙️ Настройки\n\n"
-            ."• Сменить анкету — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.\n"
-            .'• Удалить аккаунт — сотрутся все чек-ины, фото и цели. Потом снова /start.',
-            $this->settingsMenuKeyboard(),
-            null
+            "⚙️ <b>Настройки</b>\n\n"
+            ."✏️ <b>Сменить анкету</b> — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.\n\n"
+            .'🗑 <b>Удалить аккаунт</b> — сотрутся все чек-ины, фото и цели. Потом снова /start.',
+            $this->settingsMenuKeyboard()
         );
     }
 
@@ -304,6 +329,9 @@ class FitBotService
             [
                 ['text' => 'Чек-ин'],
                 ['text' => 'Рейтинг'],
+                ['text' => '📋 План'],
+            ],
+            [
                 ['text' => '⚙️ Настройки'],
             ],
             [
@@ -674,7 +702,8 @@ class FitBotService
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
         $this->telegram->sendMessage(
             $chatId,
-            'Готово! Каждый день отмечай /check, смотри /rating. Раз в ~30 дней напомню про фото прогресса.',
+            '🎉 <b>Готово!</b> Каждый день — <b>/check</b> ✍️, статистика — <b>/rating</b> 📊, план под рукой — кнопка <b>«План»</b> или <b>/plan</b>.'
+            ."\n".'Раз в ~30 дней напомню про фото прогресса 📷',
             $this->mainMenuKeyboard()
         );
     }
@@ -691,28 +720,46 @@ class FitBotService
             return;
         }
 
+        if ($axis === 'workout') {
+            $variant = WorkoutCheckVariant::tryFrom($ratingVal);
+            if (! $variant) {
+                return;
+            }
+            $check->workout_variant = $variant->value;
+            $check->workout_rating = match ($variant) {
+                WorkoutCheckVariant::Trained => CheckRating::Green->value,
+                WorkoutCheckVariant::Rest, WorkoutCheckVariant::Walk => CheckRating::Yellow->value,
+            };
+            $check->save();
+            $this->finalizeOrContinueCheck($user, $chatId, $check);
+
+            return;
+        }
+
+        if ($axis !== 'diet') {
+            return;
+        }
+
         $rating = CheckRating::tryFrom($ratingVal);
         if (! $rating) {
             return;
         }
 
-        match ($axis) {
-            'diet' => $check->diet_rating = $rating->value,
-            'sleep' => $check->sleep_rating = $rating->value,
-            'workout' => $check->workout_rating = $rating->value,
-            'water' => $check->water_rating = $rating->value,
-            default => null,
-        };
-
+        $check->diet_rating = $rating->value;
         $check->save();
+        $this->finalizeOrContinueCheck($user, $chatId, $check);
+    }
 
+    private function finalizeOrContinueCheck(User $user, int $chatId, DailyCheck $check): void
+    {
+        $check->refresh();
         if ($check->diet_rating && $check->sleep_rating && $check->workout_rating && $check->water_rating) {
             $check->is_completed = true;
             $this->rating->recalculateDailyCheck($check);
             $check->save();
             $this->telegram->sendMessage(
                 $chatId,
-                'Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов.',
+                '✅ Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов 🎯',
                 $this->mainMenuKeyboard()
             );
 
@@ -722,35 +769,181 @@ class FitBotService
         $this->sendNextCheckQuestion($user, $chatId, $check);
     }
 
-    private function sendNextCheckQuestion(User $user, int $chatId, DailyCheck $check): void
+    private function tryConsumeCheckQuantityReply(User $user, int $chatId, string $text): bool
     {
-        $axis = null;
-        $label = '';
-        if (! $check->diet_rating) {
-            $axis = 'diet';
-            $label = 'Питание сегодня?';
-        } elseif (! $check->sleep_rating) {
-            $axis = 'sleep';
-            $label = 'Сон вчера?';
-        } elseif (! $check->workout_rating) {
-            $axis = 'workout';
-            $label = 'Тренировка сегодня?';
-        } elseif (! $check->water_rating) {
-            $axis = 'water';
-            $label = 'Вода сегодня?';
+        $today = Carbon::today()->toDateString();
+        $check = DailyCheck::query()
+            ->where('user_id', $user->id)
+            ->whereDate('check_date', $today)
+            ->where('is_completed', false)
+            ->first();
+
+        if (! $check) {
+            return false;
         }
 
-        if ($axis === null) {
+        if (! $check->diet_rating) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '🍽 Чтобы продолжить чек-ин, сначала нажми кнопку про <b>питание</b> (сообщение выше).'
+            );
+
+            return true;
+        }
+
+        if ($check->diet_rating && ! $check->sleep_rating) {
+            return $this->applyCheckSleepHoursFromText($user, $chatId, $check, $text);
+        }
+
+        if ($check->diet_rating && $check->sleep_rating && ! $check->workout_rating) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '💪 Тут нужны кнопки — выбери, как прошёл день с <b>нагрузкой</b> (сообщение выше).'
+            );
+
+            return true;
+        }
+
+        if ($check->diet_rating && $check->sleep_rating && $check->workout_rating && ! $check->water_rating) {
+            return $this->applyCheckWaterFromText($user, $chatId, $check, $text);
+        }
+
+        return false;
+    }
+
+    private function applyCheckSleepHoursFromText(User $user, int $chatId, DailyCheck $check, string $text): bool
+    {
+        $hours = $this->parseFloat($text);
+        if ($hours === null || $hours < 0 || $hours > 16) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '😴 Напиши часы сна числом от <b>0</b> до <b>16</b> (можно <b>7.5</b>).'
+            );
+
+            return true;
+        }
+
+        $target = (float) ($user->sleep_target_hours ?? 8.0);
+        $rating = $this->rating->sleepRatingFromHours($hours, $target);
+        $check->sleep_hours_actual = $hours;
+        $check->sleep_rating = $rating->value;
+        $check->save();
+
+        $emoji = $rating === CheckRating::Green ? '🌟' : ($rating === CheckRating::Yellow ? '👍' : '💤');
+        $this->telegram->sendMessage(
+            $chatId,
+            $emoji.' Принято: <b>'.$hours.'</b> ч (цель <b>'.$target.'</b> ч) → '.$rating->emoji().' '.$rating->labelRu()
+        );
+
+        $this->finalizeOrContinueCheck($user, $chatId, $check);
+
+        return true;
+    }
+
+    private function applyCheckWaterFromText(User $user, int $chatId, DailyCheck $check, string $text): bool
+    {
+        $ml = $this->parseWaterMlFromText($text);
+        if ($ml === null || $ml < 100 || $ml > 20000) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '💧 Не разобрал объём. Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'
+            );
+
+            return true;
+        }
+
+        $goal = (int) ($user->water_goal_ml ?? 2500);
+        $rating = $this->rating->waterRatingFromMl($ml, $goal);
+        $check->water_ml_actual = $ml;
+        $check->water_rating = $rating->value;
+        $check->save();
+
+        $emoji = $rating === CheckRating::Green ? '🌊' : ($rating === CheckRating::Yellow ? '💧' : '🥤');
+        $this->telegram->sendMessage(
+            $chatId,
+            $emoji.' Принято: <b>'.$ml.'</b> мл (цель <b>'.$goal.'</b> мл) → '.$rating->emoji().' '.$rating->labelRu()
+        );
+
+        $this->finalizeOrContinueCheck($user, $chatId, $check);
+
+        return true;
+    }
+
+    private function parseWaterMlFromText(string $text): ?int
+    {
+        $t = Str::lower(str_replace(',', '.', trim($text)));
+        if ($t === '') {
+            return null;
+        }
+        if (preg_match('/^(\d+(?:\.\d+)?)\s*(л|l)\b/u', $t, $m)) {
+            return (int) round((float) $m[1] * 1000);
+        }
+        if (preg_match('/^(\d+)\s*мл/u', $t, $m)) {
+            return (int) $m[1];
+        }
+        if (preg_match('/^\d+$/', $t)) {
+            $n = (int) $t;
+
+            return $n >= 100 ? $n : (int) round($n * 1000);
+        }
+        if (preg_match('/^(\d+(?:\.\d+)?)$/', $t, $m)) {
+            $f = (float) $m[1];
+
+            return $f <= 12 ? (int) round($f * 1000) : (int) round($f);
+        }
+
+        return null;
+    }
+
+    private function sendNextCheckQuestion(User $user, int $chatId, DailyCheck $check): void
+    {
+        if (! $check->diet_rating) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '🍽 <b>Питание сегодня?</b> Как получилось держать план?',
+                $this->dietRatingKeyboard((int) $check->id)
+            );
+
             return;
         }
 
-        $keyboard = $this->ratingKeyboard((int) $check->id, $axis);
-        $this->telegram->sendMessage($chatId, $label, $keyboard);
+        if (! $check->sleep_rating) {
+            $target = $user->sleep_target_hours ?? 8;
+            $this->telegram->sendMessage(
+                $chatId,
+                '😴 <b>Сон прошлой ночью</b>'."\n\n"
+                .'Сколько часов реально спал? Напиши число (например <b>7.5</b>).'."\n"
+                .'🎯 Цель из анкеты: <b>'.$target.'</b> ч — от неё посчитаю баллы.'
+            );
+
+            return;
+        }
+
+        if (! $check->workout_rating) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '💪 <b>Движение сегодня</b>'."\n\n".'Что из этого ближе?',
+                $this->workoutVariantKeyboard((int) $check->id)
+            );
+
+            return;
+        }
+
+        if (! $check->water_rating) {
+            $goal = (int) ($user->water_goal_ml ?? 2500);
+            $this->telegram->sendMessage(
+                $chatId,
+                '💧 <b>Вода за день</b>'."\n\n"
+                .'Сколько примерно выпил? Если не считал точно — оцени «на глаз», этого достаточно.'."\n"
+                .'Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'."\n"
+                .'🎯 Цель из плана: <b>'.$goal.'</b> мл'
+            );
+        }
     }
 
-    private function ratingKeyboard(int $checkId, string $axis): array
+    private function dietRatingKeyboard(int $checkId): array
     {
-        $prefix = 'chk:'.$checkId.':'.$axis.':';
+        $prefix = 'chk:'.$checkId.':diet:';
 
         return $this->telegram->inlineKeyboard([
             [
@@ -758,6 +951,17 @@ class FitBotService
                 ['text' => CheckRating::Yellow->emoji().' нормально', 'callback_data' => $prefix.CheckRating::Yellow->value],
                 ['text' => CheckRating::Red->emoji().' плохо', 'callback_data' => $prefix.CheckRating::Red->value],
             ],
+        ]);
+    }
+
+    private function workoutVariantKeyboard(int $checkId): array
+    {
+        $p = 'chk:'.$checkId.':workout:';
+
+        return $this->telegram->inlineKeyboard([
+            [['text' => '💪 Позанимался', 'callback_data' => $p.WorkoutCheckVariant::Trained->value]],
+            [['text' => '😴 День отдыха', 'callback_data' => $p.WorkoutCheckVariant::Rest->value]],
+            [['text' => '🚶 Прогулялся', 'callback_data' => $p.WorkoutCheckVariant::Walk->value]],
         ]);
     }
 
@@ -881,6 +1085,7 @@ class FitBotService
         return match (trim($text)) {
             'Чек-ин' => 'check',
             'Рейтинг' => 'rating',
+            '📋 План', 'План' => 'plan',
             '⚙️ Настройки', 'Настройки' => 'settings',
             '👉 Персональный план (AI)' => 'plan_ai',
             default => null,

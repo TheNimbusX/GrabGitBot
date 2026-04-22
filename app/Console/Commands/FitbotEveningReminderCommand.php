@@ -45,6 +45,9 @@ class FitbotEveningReminderCommand extends Command
                     [
                         ['text' => 'Чек-ин'],
                         ['text' => 'Рейтинг'],
+                        ['text' => '📋 План'],
+                    ],
+                    [
                         ['text' => '⚙️ Настройки'],
                     ],
                     [

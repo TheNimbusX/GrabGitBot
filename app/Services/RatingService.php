@@ -23,6 +23,42 @@ class RatingService
         return $enum?->points() ?? 0;
     }
 
+    /** Оценка сна по фактическим часам и цели из анкеты. */
+    public function sleepRatingFromHours(float $actualHours, float $targetHours): CheckRating
+    {
+        $target = max(4.0, min(12.0, $targetHours));
+        $actualHours = max(0.0, min(16.0, $actualHours));
+
+        if ($actualHours < $target - 1.2) {
+            return CheckRating::Red;
+        }
+        if ($actualHours <= $target + 1.0) {
+            return CheckRating::Green;
+        }
+        if ($actualHours <= $target + 2.5) {
+            return CheckRating::Yellow;
+        }
+
+        return CheckRating::Yellow;
+    }
+
+    /** Оценка воды по фактически выпитому объёму и цели из плана. */
+    public function waterRatingFromMl(int $actualMl, int $goalMl): CheckRating
+    {
+        $goalMl = max(500, $goalMl);
+        $actualMl = max(0, $actualMl);
+        $ratio = $actualMl / $goalMl;
+
+        if ($ratio >= 0.92) {
+            return CheckRating::Green;
+        }
+        if ($ratio >= 0.65) {
+            return CheckRating::Yellow;
+        }
+
+        return CheckRating::Red;
+    }
+
     public function recalculateDailyCheck(DailyCheck $check): void
     {
         if (! $check->is_completed) {
@@ -96,7 +132,7 @@ class RatingService
             ->get();
 
         if ($checks->isEmpty()) {
-            return ['Пока мало данных — отметьте несколько чек-инов, и я смогу подсказать, что проседает.'];
+            return ['📭 Пока мало данных — отметь несколько чек-инов, и я подскажу, что чаще проседает.'];
         }
 
         $dimensions = [
@@ -126,17 +162,21 @@ class RatingService
 
         $hints = [];
         if ($lowestAvg < 1.5) {
-            $hints[] = 'Чаще всего проседает '.$dimensions[$lowestKey]['label'].' — имеет смысл сфокусироваться на нём.';
+            $hints[] = '📉 Чаще всего проседает '.$dimensions[$lowestKey]['label'].' — можно чуть чаще обращать на это внимание.';
         }
 
         $todayScore = $this->scoreForDay($user, $now);
         if ($todayScore >= self::MAX_DAILY_POINTS) {
-            $hints[] = 'Сегодня отличная дисциплина.';
+            $hints[] = '🌟 Сегодня максимум баллов — супер дисциплина!';
+        } elseif ($todayScore >= 7) {
+            $hints[] = '💪 Сегодня почти идеально — отличный день, так держать!';
+        } elseif ($todayScore >= 5) {
+            $hints[] = '✨ Хороший день: в целом всё неплохо, мелочи ещё можно подтянуть.';
         } elseif ($todayScore > 0) {
-            $hints[] = 'Сегодняшний день можно добить до максимума — проверьте, что ещё не на «идеально».';
+            $hints[] = '📌 Баллы есть, но завтра можно сделать ровнее — без «досыпания вчера», только вперёд.';
         }
 
-        return $hints ?: ['Пока всё в балансе — продолжайте в том же духе.'];
+        return $hints ?: ['⚖️ Пока всё в балансе — продолжай в том же духе!'];
     }
 
     public function formatSummaryMessage(User $user, ?Carbon $now = null): string
@@ -144,11 +184,12 @@ class RatingService
         $s = $this->summary($user, $now);
         $streak = $this->checkInStreakDays($user, $now);
         $lines = [
-            'Твой рейтинг дисциплины:',
-            '• Сегодня: '.$s['day'].' / '.self::MAX_DAILY_POINTS,
-            '• Неделя: '.$s['week'].' баллов',
-            '• Месяц: '.$s['month'].' баллов',
-            '• Дней в ударе (чек-ины подряд): '.$streak,
+            '📊 <b>Твой рейтинг дисциплины</b>',
+            '',
+            '📅 Сегодня: '.$s['day'].' / '.self::MAX_DAILY_POINTS,
+            '🗓 Неделя: '.$s['week'].' баллов',
+            '📆 Месяц: '.$s['month'].' баллов',
+            '🔥 Дней в ударе подряд: '.$streak,
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
         ];

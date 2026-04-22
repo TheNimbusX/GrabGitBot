@@ -75,19 +75,19 @@ class PlanGeneratorService
         $workout = $this->buildWorkoutBlock($user);
 
         return implode("\n", [
-            '<b>Твой стартовый план FitBot</b>',
+            '📋 <b>Твой стартовый план FitBot</b>',
             '',
-            '<b>Питание</b>',
+            '🍽 <b>Питание</b>',
             'Калории (оценка): <b>'.$user->daily_calories_target.'</b> ккал/день',
             'БЖУ: белки <b>'.$user->protein_g.'</b> г, жиры <b>'.$user->fat_g.'</b> г, углеводы <b>'.$user->carbs_g.'</b> г',
             '',
-            '<b>Пример дня</b>',
+            '🥗 <b>Пример дня</b>',
             $menu,
             '',
-            '<b>Вода</b>',
-            'Пить не меньше <b>3+ л</b> воды в день — обязательно!',
+            '💧 <b>Вода</b>',
+            'Ориентир: <b>'.(int) $user->water_goal_ml.'</b> мл/день (можно округлить «на глаз»).',
             '',
-            '<b>Сон</b>',
+            '😴 <b>Сон</b>',
             'Ориентир: <b>'.$sleep.'</b> ч (как ты указал).',
             trim($workout),
         ]);

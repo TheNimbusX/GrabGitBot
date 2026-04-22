@@ -51,6 +51,9 @@ class FitbotMorningMotivationCommand extends Command
                     [
                         ['text' => 'Чек-ин'],
                         ['text' => 'Рейтинг'],
+                        ['text' => '📋 План'],
+                    ],
+                    [
                         ['text' => '⚙️ Настройки'],
                     ],
                     [

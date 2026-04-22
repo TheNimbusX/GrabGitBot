@@ -11,9 +11,12 @@ class DailyCheck extends Model
         'user_id',
         'check_date',
         'diet_rating',
+        'sleep_hours_actual',
         'sleep_rating',
         'workout_rating',
+        'workout_variant',
         'water_rating',
+        'water_ml_actual',
         'total_score',
         'is_completed',
     ];
@@ -21,6 +24,7 @@ class DailyCheck extends Model
     protected $casts = [
         'check_date' => 'date',
         'is_completed' => 'boolean',
+        'sleep_hours_actual' => 'float',
     ];
 
     public function user(): BelongsTo
