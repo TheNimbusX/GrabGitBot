@@ -61,7 +61,11 @@ class FitBotService
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
                 '/rating' => $this->cmdRating($user, $chatId),
-                default => $this->telegram->sendMessage($chatId, 'Неизвестная команда. Попробуй /start'),
+                '/settings' => $this->cmdSettings($user, $chatId),
+                default => $this->telegram->sendMessage(
+                    $chatId,
+                    'Неизвестная команда. Команды: /start, /check, /rating, /settings'
+                ),
             };
 
             return;
@@ -90,7 +94,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Выбери действие в меню или команды: /check, /rating',
+                'Выбери действие в меню или команды: /check, /rating, /settings',
                 $this->mainMenuKeyboard()
             );
         }
@@ -118,6 +122,18 @@ class FitBotService
 
         if ($data === 'menu:rating') {
             $this->cmdRating($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'menu:settings') {
+            $this->cmdSettings($user, $chatId);
+
+            return;
+        }
+
+        if (str_starts_with($data, 'set:')) {
+            $this->handleSettingsCallback($user, $chatId, $data);
 
             return;
         }
@@ -398,7 +414,7 @@ class FitBotService
     {
         $this->telegram->sendMessage(
             $chatId,
-            'Какой у тебя <b>пол</b>? От этого зависят расчёт калорий/БЖУ и пример тренировок.',
+            'Привет! Начнём с <b>пола</b> — от него зависят расчёт калорий, БЖУ и пример тренировок.',
             $this->telegram->inlineKeyboard([
                 [['text' => 'Мужской', 'callback_data' => 'onb:gender:'.Gender::Male->value]],
                 [['text' => 'Женский', 'callback_data' => 'onb:gender:'.Gender::Female->value]],

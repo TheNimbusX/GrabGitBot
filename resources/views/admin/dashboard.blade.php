@@ -42,6 +42,7 @@
                     <th>ID</th>
                     <th>Telegram</th>
                     <th>Имя</th>
+                    <th>Возраст</th>
                     <th>Онбординг</th>
                     <th>Серия дней</th>
                     <th>Последний чек-ин</th>
@@ -55,6 +56,7 @@
                         <td>{{ $u->id }}</td>
                         <td>{{ $u->telegram_id }}</td>
                         <td>{{ $u->first_name }} @if($u->username) ({{ '@'.$u->username }}) @endif</td>
+                        <td>{{ $u->age ?? '—' }}</td>
                         <td class="{{ $row['onboarding_done'] ? 'ok' : 'no' }}">{{ $row['onboarding_done'] ? 'да' : 'нет' }}</td>
                         <td>{{ $row['streak'] }}</td>
                         <td>{{ $row['last_check'] ? $row['last_check']->format('Y-m-d') : '—' }}</td>

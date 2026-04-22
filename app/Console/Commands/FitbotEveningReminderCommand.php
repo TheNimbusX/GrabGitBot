@@ -8,11 +8,11 @@ use App\Services\Telegram\TelegramBotService;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
-class FitbotDailyReminderCommand extends Command
+class FitbotEveningReminderCommand extends Command
 {
-    protected $signature = 'fitbot:daily-reminder';
+    protected $signature = 'fitbot:evening-reminder';
 
-    protected $description = 'Утреннее напоминание о /check (если сегодня чек-ин ещё не завершён)';
+    protected $description = 'Вечернее напоминание занести день в /check (если чек-ин сегодня не завершён)';
 
     public function handle(TelegramBotService $telegram, RatingService $rating): int
     {
@@ -37,7 +37,7 @@ class FitbotDailyReminderCommand extends Command
                 }
 
                 $streak = $rating->checkInStreakDays($user);
-                $text = "⏰ <b>Доброе утро!</b> Не забудь пройти чек-ин — /check\n\n"
+                $text = "🌙 <b>Вечер!</b> Пора записать день в FitBot — пройди <b>/check</b>.\n\n"
                     .'Серия «дней в ударе»: <b>'.$streak.'</b>. '
                     .'Если сегодня не завершишь чек-ин, серия обнулится.';
 
@@ -46,7 +46,7 @@ class FitbotDailyReminderCommand extends Command
             }
         });
 
-        $this->info("Отправлено напоминаний: {$sent}");
+        $this->info("Вечерних напоминаний: {$sent}");
 
         return self::SUCCESS;
     }
