@@ -41,7 +41,16 @@ class FitbotEveningReminderCommand extends Command
                     .'Серия «дней в ударе»: <b>'.$streak.'</b>. '
                     .'Если сегодня не завершишь чек-ин, серия обнулится.';
 
-                $telegram->sendMessage((int) $user->telegram_id, $text);
+                $telegram->sendMessage((int) $user->telegram_id, $text, $telegram->replyKeyboard([
+                    [
+                        ['text' => 'Чек-ин'],
+                        ['text' => 'Рейтинг'],
+                        ['text' => '⚙️ Настройки'],
+                    ],
+                    [
+                        ['text' => '👉 Персональный план (AI)'],
+                    ],
+                ]));
                 $sent++;
             }
         });

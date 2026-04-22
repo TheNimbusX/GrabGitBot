@@ -47,7 +47,16 @@ class FitbotMorningMotivationCommand extends Command
             foreach ($users as $user) {
                 $idx = crc32((string) $user->telegram_id.$dateKey) % count(self::MESSAGES);
                 $text = self::MESSAGES[$idx];
-                $telegram->sendMessage((int) $user->telegram_id, $text);
+                $telegram->sendMessage((int) $user->telegram_id, $text, $telegram->replyKeyboard([
+                    [
+                        ['text' => 'Чек-ин'],
+                        ['text' => 'Рейтинг'],
+                        ['text' => '⚙️ Настройки'],
+                    ],
+                    [
+                        ['text' => '👉 Персональный план (AI)'],
+                    ],
+                ]));
                 $sent++;
             }
         });
