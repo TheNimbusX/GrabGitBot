@@ -52,10 +52,13 @@ class FitBotService
 
         $user = $this->syncUser($telegramId, $from);
 
-        $this->maybeRemindProgressPhoto($user, $chatId);
+        $text = $this->normalizeMessageText((string) ($msg['text'] ?? ''));
+        $isCommand = $text !== '' && Str::startsWith($text, '/');
+        if (! $isCommand && empty($msg['photo'])) {
+            $this->maybeRemindProgressPhoto($user, $chatId);
+        }
 
-        $text = trim((string) ($msg['text'] ?? ''));
-        if ($text !== '' && Str::startsWith($text, '/')) {
+        if ($isCommand) {
             $command = $this->normalizeBotCommand($text);
             match ($command) {
                 '/start' => $this->cmdStart($user, $chatId),
@@ -64,7 +67,8 @@ class FitBotService
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    'Неизвестная команда. Команды: /start, /check, /rating, /settings (или /настройки)'
+                    'Неизвестная команда. Команды: /start, /check, /rating, /settings (или /настройки)',
+                    $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
                 ),
             };
 
@@ -163,7 +167,11 @@ class FitBotService
         }
 
         if ($data === 'pay:ai') {
-            $this->telegram->sendMessage($chatId, 'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.');
+            $this->telegram->sendMessage(
+                $chatId,
+                'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
+                $this->mainMenuKeyboard()
+            );
 
             return;
         }
@@ -243,7 +251,8 @@ class FitBotService
         if ($existing && $existing->is_completed) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Сегодняшний чек-ин уже заполнен. Завтра снова жду /check'
+                'Сегодняшний чек-ин уже заполнен. Завтра снова жду /check',
+                $this->mainMenuKeyboard()
             );
 
             return;
@@ -271,7 +280,7 @@ class FitBotService
         }
 
         $text = $this->rating->formatSummaryMessage($user);
-        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
+        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard(), null);
     }
 
     private function cmdSettings(User $user, int $chatId): void
@@ -761,7 +770,9 @@ class FitBotService
         $user->username = $from['username'] ?? null;
         $user->first_name = $from['first_name'] ?? null;
         $user->last_name = $from['last_name'] ?? null;
-        $user->save();
+        if (! $user->exists || $user->isDirty()) {
+            $user->save();
+        }
 
         return $user;
     }
@@ -825,6 +836,22 @@ class FitBotService
         }
 
         return (int) $normalized;
+    }
+
+    /** BOM, полноширинный «/» (U+FF0F) и похожие — Telegram/клавиатуры иногда шлют не ASCII-слэш. */
+    private function normalizeMessageText(string $text): string
+    {
+        $text = preg_replace('/^\x{FEFF}/u', '', $text);
+        $text = trim($text);
+        if ($text === '') {
+            return $text;
+        }
+        $first = mb_substr($text, 0, 1);
+        if (in_array($first, ['／', '⁄', '∕'], true)) {
+            $text = '/'.mb_substr($text, 1);
+        }
+
+        return $text;
     }
 
     /** Telegram шлёт команды как /settings@BotName — убираем суффикс бота. */

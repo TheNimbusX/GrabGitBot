@@ -148,7 +148,7 @@ class RatingService
             '• Сегодня: '.$s['day'].' / '.self::MAX_DAILY_POINTS,
             '• Неделя: '.$s['week'].' баллов',
             '• Месяц: '.$s['month'].' баллов',
-            '• Дней в ударе (чек-ины подряд): <b>'.$streak.'</b>',
+            '• Дней в ударе (чек-ины подряд): '.$streak,
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
         ];

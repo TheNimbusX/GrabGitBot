@@ -221,8 +221,8 @@ class TelegramBotService
     {
         try {
             $response = $this->http()
-                ->connectTimeout(20)
-                ->timeout(120)
+                ->connectTimeout(12)
+                ->timeout(55)
                 ->asJson()
                 ->post($this->apiUrl($method), $payload);
         } catch (Throwable $e) {
