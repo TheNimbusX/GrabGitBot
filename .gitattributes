@@ -1,0 +1,2 @@
+* text=auto
+docker/php/entrypoint.sh text eol=lf

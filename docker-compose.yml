@@ -1,0 +1,62 @@
+# Продакшен: на сервере в .env задай APP_DOMAIN (бот.example.com), APP_URL=https://...,
+# DB_HOST=mysql, DB_USERNAME/DB_PASSWORD (не root), DB_ROOT_PASSWORD, TELEGRAM_BOT_TOKEN, APP_DEBUG=false.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nginx
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-fitbot}
+      MYSQL_USER: ${DB_USERNAME:-fitbot}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fitbot}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_root_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  mysql_data:

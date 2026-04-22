@@ -1,0 +1,547 @@
+<?php
+
+namespace App\Services\FitBot;
+
+use App\Enums\CheckRating;
+use App\Enums\ExperienceLevel;
+use App\Enums\FitnessGoal;
+use App\Enums\OnboardingStep;
+use App\Enums\PhotoType;
+use App\Models\DailyCheck;
+use App\Models\Photo;
+use App\Models\User;
+use App\Services\PlanGeneratorService;
+use App\Services\RatingService;
+use App\Services\Telegram\TelegramBotService;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
+
+class FitBotService
+{
+    public function __construct(
+        private readonly TelegramBotService $telegram,
+        private readonly PlanGeneratorService $plans,
+        private readonly RatingService $rating,
+    ) {}
+
+    public function handleUpdate(array $u): void
+    {
+        if (isset($u['callback_query'])) {
+            $this->handleCallback($u['callback_query']);
+
+            return;
+        }
+
+        if (isset($u['message'])) {
+            $this->handleMessage($u['message']);
+        }
+    }
+
+    private function handleMessage(array $msg): void
+    {
+        $chatId = (int) $msg['chat']['id'];
+        $from = $msg['from'] ?? [];
+        $telegramId = (int) ($from['id'] ?? 0);
+
+        if ($telegramId === 0) {
+            return;
+        }
+
+        $user = $this->syncUser($telegramId, $from);
+
+        $this->maybeRemindProgressPhoto($user, $chatId);
+
+        $text = trim((string) ($msg['text'] ?? ''));
+        if ($text !== '' && Str::startsWith($text, '/')) {
+            $command = strtolower(Str::before($text, ' '));
+            match ($command) {
+                '/start' => $this->cmdStart($user, $chatId),
+                '/check' => $this->cmdCheck($user, $chatId),
+                '/rating' => $this->cmdRating($user, $chatId),
+                default => $this->telegram->sendMessage($chatId, 'Неизвестная команда. Попробуй /start'),
+            };
+
+            return;
+        }
+
+        if (! empty($msg['photo']) && $user->onboardingStepEnum() === OnboardingStep::AskBeforePhoto) {
+            $fileId = (string) $msg['photo'][array_key_last($msg['photo'])]['file_id'];
+            $this->finishOnboardingWithOptionalPhoto($user, $chatId, $fileId);
+
+            return;
+        }
+
+        if (! empty($msg['photo']) && $user->hasCompletedOnboarding()) {
+            $this->saveProgressPhoto($user, $chatId, $msg['photo']);
+
+            return;
+        }
+
+        $step = $user->onboardingStepEnum();
+        if ($step !== null && $text !== '') {
+            $this->handleOnboardingText($user, $chatId, $step, $text);
+
+            return;
+        }
+
+        if ($user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage(
+                $chatId,
+                'Выбери действие в меню или команды: /check, /rating',
+                $this->mainMenuKeyboard()
+            );
+        }
+    }
+
+    private function handleCallback(array $cq): void
+    {
+        $from = $cq['from'] ?? [];
+        $telegramId = (int) ($from['id'] ?? 0);
+        $data = (string) ($cq['data'] ?? '');
+        $chatId = (int) ($cq['message']['chat']['id'] ?? 0);
+
+        if ($telegramId === 0 || $chatId === 0) {
+            return;
+        }
+
+        $user = $this->syncUser($telegramId, $from);
+        $this->telegram->answerCallbackQuery($cq['id']);
+
+        if ($data === 'menu:check') {
+            $this->cmdCheck($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'menu:rating') {
+            $this->cmdRating($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'pay:ai') {
+            $this->telegram->sendMessage($chatId, 'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.');
+
+            return;
+        }
+
+        if (str_starts_with($data, 'onb:')) {
+            $this->handleOnboardingCallback($user, $chatId, $data);
+
+            return;
+        }
+
+        if (str_starts_with($data, 'chk:')) {
+            $this->handleCheckCallback($user, $chatId, $data);
+
+            return;
+        }
+    }
+
+    private function cmdStart(User $user, int $chatId): void
+    {
+        if ($user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage(
+                $chatId,
+                'Снова привет! Я FitBot — держим питание, сон, тренировки и воду под контролем.',
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
+        match ($user->onboardingStepEnum()) {
+            OnboardingStep::AskWeight => $this->telegram->sendMessage(
+                $chatId,
+                'Привет! Давай настроим профиль. Введи свой <b>вес в кг</b> (например 75.5).'
+            ),
+            OnboardingStep::AskHeight => $this->telegram->sendMessage(
+                $chatId,
+                'Продолжим: введи <b>рост в см</b> (например 180).'
+            ),
+            OnboardingStep::AskGoal => $this->askGoal($chatId),
+            OnboardingStep::AskExperience => $this->askExperience($chatId),
+            OnboardingStep::AskSleep => $this->telegram->sendMessage(
+                $chatId,
+                'Сколько часов сна в цель? Введи число (например <b>7.5</b>).'
+            ),
+            OnboardingStep::AskBeforePhoto => $this->telegram->sendMessage(
+                $chatId,
+                'Пришли фото «до» или нажми «Пропустить».',
+                $this->telegram->inlineKeyboard([
+                    [['text' => 'Пропустить фото', 'callback_data' => 'onb:photo:skip']],
+                ])
+            ),
+            default => $this->telegram->sendMessage($chatId, 'Продолжим настройку — следуй подсказкам выше.'),
+        };
+    }
+
+    private function cmdCheck(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+
+            return;
+        }
+
+        $today = Carbon::today()->toDateString();
+
+        $existing = DailyCheck::query()
+            ->where('user_id', $user->id)
+            ->whereDate('check_date', $today)
+            ->first();
+
+        if ($existing && $existing->is_completed) {
+            $this->telegram->sendMessage(
+                $chatId,
+                'Сегодняшний чек-ин уже заполнен. Завтра снова жду /check'
+            );
+
+            return;
+        }
+
+        $check = $existing ?? new DailyCheck([
+            'user_id' => $user->id,
+            'check_date' => $today,
+            'is_completed' => false,
+            'total_score' => 0,
+        ]);
+        if (! $check->exists) {
+            $check->save();
+        }
+
+        $this->sendNextCheckQuestion($user, $chatId, $check);
+    }
+
+    private function cmdRating(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+
+            return;
+        }
+
+        $text = $this->rating->formatSummaryMessage($user);
+        $this->telegram->sendMessage($chatId, e($text), $this->mainMenuKeyboard(), null);
+    }
+
+    /** @return array<string, mixed> */
+    private function mainMenuKeyboard(): array
+    {
+        return $this->telegram->inlineKeyboard([
+            [
+                ['text' => 'Чек-ин', 'callback_data' => 'menu:check'],
+                ['text' => 'Рейтинг', 'callback_data' => 'menu:rating'],
+            ],
+            [
+                ['text' => '👉 Персональный план (AI)', 'callback_data' => 'pay:ai'],
+            ],
+        ]);
+    }
+
+    private function handleOnboardingCallback(User $user, int $chatId, string $data): void
+    {
+        $parts = explode(':', $data, 3);
+        if (count($parts) < 3) {
+            return;
+        }
+        [, $key, $value] = $parts;
+
+        if ($key === 'goal') {
+            $goal = FitnessGoal::tryFrom($value);
+            if (! $goal) {
+                return;
+            }
+            $user->goal = $goal->value;
+            $user->onboarding_step = OnboardingStep::AskExperience->value;
+            $user->save();
+            $this->askExperience($chatId);
+
+            return;
+        }
+
+        if ($key === 'exp') {
+            $exp = ExperienceLevel::tryFrom($value);
+            if (! $exp) {
+                return;
+            }
+            $user->experience = $exp->value;
+            $user->onboarding_step = OnboardingStep::AskSleep->value;
+            $user->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                'Сколько часов сна хочешь держать в цель? Введи число (например <b>7.5</b>).'
+            );
+
+            return;
+        }
+
+        if ($key === 'photo' && $value === 'skip') {
+            $this->finishOnboardingWithOptionalPhoto($user, $chatId, null);
+
+            return;
+        }
+    }
+
+    private function handleOnboardingText(User $user, int $chatId, OnboardingStep $step, string $text): void
+    {
+        match ($step) {
+            OnboardingStep::AskWeight => $this->onboardingWeight($user, $chatId, $text),
+            OnboardingStep::AskHeight => $this->onboardingHeight($user, $chatId, $text),
+            OnboardingStep::AskSleep => $this->onboardingSleep($user, $chatId, $text),
+            default => null,
+        };
+    }
+
+    private function onboardingWeight(User $user, int $chatId, string $text): void
+    {
+        $w = $this->parseFloat($text);
+        if ($w === null || $w < 30 || $w > 300) {
+            $this->telegram->sendMessage($chatId, 'Нужно реалистичное значение веса в кг (30–300). Попробуй ещё раз.');
+
+            return;
+        }
+        $user->weight_kg = $w;
+        $user->onboarding_step = OnboardingStep::AskHeight->value;
+        $user->save();
+        $this->telegram->sendMessage($chatId, 'Отлично. Теперь <b>рост в см</b> (например 180).');
+    }
+
+    private function onboardingHeight(User $user, int $chatId, string $text): void
+    {
+        $h = $this->parseInt($text);
+        if ($h === null || $h < 120 || $h > 230) {
+            $this->telegram->sendMessage($chatId, 'Укажи рост в см целым числом (120–230).');
+
+            return;
+        }
+        $user->height_cm = $h;
+        $user->onboarding_step = OnboardingStep::AskGoal->value;
+        $user->save();
+        $this->askGoal($chatId);
+    }
+
+    private function onboardingSleep(User $user, int $chatId, string $text): void
+    {
+        $s = $this->parseFloat($text);
+        if ($s === null || $s < 4 || $s > 12) {
+            $this->telegram->sendMessage($chatId, 'Введи часы сна числом (например 7.5), обычно 4–12.');
+
+            return;
+        }
+        $user->sleep_target_hours = $s;
+        $user->onboarding_step = OnboardingStep::AskBeforePhoto->value;
+        $user->save();
+        $this->telegram->sendMessage(
+            $chatId,
+            'Загрузи фото «до» (одно сообщение с фото) или нажми «Пропустить».',
+            $this->telegram->inlineKeyboard([
+                [['text' => 'Пропустить фото', 'callback_data' => 'onb:photo:skip']],
+            ])
+        );
+    }
+
+    private function askGoal(int $chatId): void
+    {
+        $rows = [];
+        foreach (FitnessGoal::cases() as $g) {
+            $rows[] = [['text' => '🎯 '.$g->labelRu(), 'callback_data' => 'onb:goal:'.$g->value]];
+        }
+        $this->telegram->sendMessage(
+            $chatId,
+            'Какая <b>цель</b>?',
+            $this->telegram->inlineKeyboard($rows)
+        );
+    }
+
+    private function askExperience(int $chatId): void
+    {
+        $rows = [];
+        foreach (ExperienceLevel::cases() as $e) {
+            $rows[] = [['text' => $e->labelRu(), 'callback_data' => 'onb:exp:'.$e->value]];
+        }
+        $this->telegram->sendMessage(
+            $chatId,
+            'Твой <b>опыт</b> тренировок?',
+            $this->telegram->inlineKeyboard($rows)
+        );
+    }
+
+    private function finishOnboardingWithOptionalPhoto(User $user, int $chatId, ?string $fileId): void
+    {
+        if ($fileId !== null) {
+            $user->before_photo_file_id = $fileId;
+            Photo::query()->create([
+                'user_id' => $user->id,
+                'file_id' => $fileId,
+                'type' => PhotoType::Before->value,
+            ]);
+        }
+
+        $user->onboarding_step = null;
+        $user->next_progress_photo_at = Carbon::now()->addDays(30);
+        $user->save();
+
+        $this->plans->applyBasePlan($user);
+        $user->refresh();
+
+        $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
+        $this->telegram->sendMessage(
+            $chatId,
+            'Готово! Каждый день отмечай /check, смотри /rating. Раз в ~30 дней напомню про фото прогресса.',
+            $this->mainMenuKeyboard()
+        );
+    }
+
+    private function handleCheckCallback(User $user, int $chatId, string $data): void
+    {
+        $parts = explode(':', $data);
+        if (count($parts) !== 4) {
+            return;
+        }
+        [, $id, $axis, $ratingVal] = $parts;
+        $check = DailyCheck::query()->where('user_id', $user->id)->whereKey((int) $id)->first();
+        if (! $check || $check->is_completed) {
+            return;
+        }
+
+        $rating = CheckRating::tryFrom($ratingVal);
+        if (! $rating) {
+            return;
+        }
+
+        match ($axis) {
+            'diet' => $check->diet_rating = $rating->value,
+            'sleep' => $check->sleep_rating = $rating->value,
+            'workout' => $check->workout_rating = $rating->value,
+            'water' => $check->water_rating = $rating->value,
+            default => null,
+        };
+
+        $check->save();
+
+        if ($check->diet_rating && $check->sleep_rating && $check->workout_rating && $check->water_rating) {
+            $check->is_completed = true;
+            $this->rating->recalculateDailyCheck($check);
+            $check->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                'Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов.'
+            );
+
+            return;
+        }
+
+        $this->sendNextCheckQuestion($user, $chatId, $check);
+    }
+
+    private function sendNextCheckQuestion(User $user, int $chatId, DailyCheck $check): void
+    {
+        $axis = null;
+        $label = '';
+        if (! $check->diet_rating) {
+            $axis = 'diet';
+            $label = 'Питание сегодня?';
+        } elseif (! $check->sleep_rating) {
+            $axis = 'sleep';
+            $label = 'Сон сегодня?';
+        } elseif (! $check->workout_rating) {
+            $axis = 'workout';
+            $label = 'Тренировка сегодня?';
+        } elseif (! $check->water_rating) {
+            $axis = 'water';
+            $label = 'Вода сегодня?';
+        }
+
+        if ($axis === null) {
+            return;
+        }
+
+        $keyboard = $this->ratingKeyboard((int) $check->id, $axis);
+        $this->telegram->sendMessage($chatId, $label, $keyboard);
+    }
+
+    private function ratingKeyboard(int $checkId, string $axis): array
+    {
+        $prefix = 'chk:'.$checkId.':'.$axis.':';
+
+        return $this->telegram->inlineKeyboard([
+            [
+                ['text' => CheckRating::Green->emoji().' идеально', 'callback_data' => $prefix.CheckRating::Green->value],
+                ['text' => CheckRating::Yellow->emoji().' нормально', 'callback_data' => $prefix.CheckRating::Yellow->value],
+                ['text' => CheckRating::Red->emoji().' плохо', 'callback_data' => $prefix.CheckRating::Red->value],
+            ],
+        ]);
+    }
+
+    private function syncUser(int $telegramId, array $from): User
+    {
+        $user = User::query()->firstOrNew(['telegram_id' => $telegramId]);
+        if (! $user->exists) {
+            $user->onboarding_step = OnboardingStep::AskWeight->value;
+        }
+        $user->username = $from['username'] ?? null;
+        $user->first_name = $from['first_name'] ?? null;
+        $user->last_name = $from['last_name'] ?? null;
+        $user->save();
+
+        return $user;
+    }
+
+    private function maybeRemindProgressPhoto(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            return;
+        }
+        $due = $user->next_progress_photo_at;
+        if ($due === null || $due->isFuture()) {
+            return;
+        }
+
+        $cacheKey = 'fitbot:progress_photo_prompt:'.$user->id.':'.Carbon::today()->toDateString();
+        if (Cache::has($cacheKey)) {
+            return;
+        }
+        Cache::put($cacheKey, true, now()->endOfDay());
+
+        $this->telegram->sendMessage(
+            $chatId,
+            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.'
+        );
+    }
+
+    /** @param array<int, array<string, mixed>> $photoSizes */
+    private function saveProgressPhoto(User $user, int $chatId, array $photoSizes): void
+    {
+        $fileId = (string) $photoSizes[array_key_last($photoSizes)]['file_id'];
+        Photo::query()->create([
+            'user_id' => $user->id,
+            'file_id' => $fileId,
+            'type' => PhotoType::Progress->value,
+        ]);
+        $user->next_progress_photo_at = Carbon::now()->addDays(30);
+        $user->save();
+        $this->telegram->sendMessage($chatId, 'Фото прогресса сохранено. Следующее напоминание через 30 дней.');
+    }
+
+    private function parseFloat(string $text): ?float
+    {
+        $normalized = str_replace(',', '.', trim($text));
+        if (! is_numeric($normalized)) {
+            return null;
+        }
+
+        return (float) $normalized;
+    }
+
+    private function parseInt(string $text): ?int
+    {
+        $normalized = trim($text);
+        if (! preg_match('/^\d+$/', $normalized)) {
+            return null;
+        }
+
+        return (int) $normalized;
+    }
+}
