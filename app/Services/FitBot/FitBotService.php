@@ -250,6 +250,17 @@ class FitBotService
         $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard(), null);
     }
 
+    private function cmdSettings(User $user, int $chatId): void
+    {
+        $this->telegram->sendMessage(
+            $chatId,
+            '<b>Настройки</b>'."\n\n"
+            .'• <b>Сменить анкету</b> — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.'."\n"
+            .'• <b>Удалить аккаунт</b> — сотрутся все чек-ины, фото и цели. Потом можно снова /start.',
+            $this->settingsMenuKeyboard()
+        );
+    }
+
     /** @return array<string, mixed> */
     private function mainMenuKeyboard(): array
     {
@@ -259,9 +270,150 @@ class FitBotService
                 ['text' => 'Рейтинг', 'callback_data' => 'menu:rating'],
             ],
             [
+                ['text' => '⚙️ Настройки', 'callback_data' => 'menu:settings'],
+            ],
+            [
                 ['text' => '👉 Персональный план (AI)', 'callback_data' => 'pay:ai'],
             ],
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function settingsMenuKeyboard(): array
+    {
+        return $this->telegram->inlineKeyboard([
+            [['text' => '✏️ Сменить анкету', 'callback_data' => 'set:edit']],
+            [['text' => '🗑 Удалить аккаунт', 'callback_data' => 'set:del:s']],
+        ]);
+    }
+
+    private function handleSettingsCallback(User $user, int $chatId, string $data): void
+    {
+        if ($data === 'set:edit') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->resetProfileForReonboarding($user);
+            $this->telegram->sendMessage(
+                $chatId,
+                'Ок, начинаем анкету заново. История <b>чек-инов</b> остаётся; после нового онбординга пересчитаю калории и БЖУ.'
+            );
+            $this->askGender($chatId);
+
+            return;
+        }
+
+        if ($data === 'set:del:n') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->telegram->sendMessage($chatId, 'Удаление отменено.', $this->settingsMenuKeyboard());
+
+            return;
+        }
+
+        if ($data === 'set:del:s') {
+            Cache::put($this->deleteAccountCacheKey($user->telegram_id), 0, now()->addMinutes(15));
+            $this->telegram->sendMessage(
+                $chatId,
+                '<b>Удаление аккаунта — подтверждение 1 из 3</b>'."\n\n"
+                .'Будут безвозвратно удалены: чек-ины, фото, цели и вся анкета. Продолжить?',
+                $this->telegram->inlineKeyboard([
+                    [
+                        ['text' => 'Да, удалить', 'callback_data' => 'set:del:y'],
+                        ['text' => 'Отмена', 'callback_data' => 'set:del:n'],
+                    ],
+                ])
+            );
+
+            return;
+        }
+
+        if ($data === 'set:del:y') {
+            $key = $this->deleteAccountCacheKey($user->telegram_id);
+            $step = Cache::get($key);
+            if ($step === null) {
+                $this->telegram->sendMessage(
+                    $chatId,
+                    'Сессия подтверждения истекла или не начата. Нажми «Удалить аккаунт» в /settings ещё раз.',
+                    $this->settingsMenuKeyboard()
+                );
+
+                return;
+            }
+
+            if ($step === 0) {
+                Cache::put($key, 1, now()->addMinutes(15));
+                $this->telegram->sendMessage(
+                    $chatId,
+                    '<b>Подтверждение 2 из 3</b>'."\n\n"
+                    .'Ты уверен? Восстановить данные будет нельзя.',
+                    $this->telegram->inlineKeyboard([
+                        [
+                            ['text' => 'Да, точно', 'callback_data' => 'set:del:y'],
+                            ['text' => 'Отмена', 'callback_data' => 'set:del:n'],
+                        ],
+                    ])
+                );
+
+                return;
+            }
+
+            if ($step === 1) {
+                Cache::put($key, 2, now()->addMinutes(15));
+                $this->telegram->sendMessage(
+                    $chatId,
+                    '<b>Последнее подтверждение — 3 из 3</b>'."\n\n"
+                    .'После этого аккаунт исчезнет. Нажми «Удалить навсегда», если решение окончательное.',
+                    $this->telegram->inlineKeyboard([
+                        [
+                            ['text' => '🗑 Удалить навсегда', 'callback_data' => 'set:del:y'],
+                            ['text' => 'Отмена', 'callback_data' => 'set:del:n'],
+                        ],
+                    ])
+                );
+
+                return;
+            }
+
+            if ($step === 2) {
+                Cache::forget($key);
+                $user->delete();
+                $this->telegram->sendMessage(
+                    $chatId,
+                    'Аккаунт удалён. Чтобы начать с чистого листа, отправь /start.'
+                );
+
+                return;
+            }
+        }
+    }
+
+    private function deleteAccountCacheKey(int $telegramId): string
+    {
+        return 'fitbot:account_delete:'.$telegramId;
+    }
+
+    private function resetProfileForReonboarding(User $user): void
+    {
+        Photo::query()
+            ->where('user_id', $user->id)
+            ->where('type', PhotoType::Before->value)
+            ->delete();
+
+        $user->age = null;
+        $user->weight_kg = null;
+        $user->height_cm = null;
+        $user->gender = null;
+        $user->activity_level = null;
+        $user->goal = null;
+        $user->experience = null;
+        $user->sleep_target_hours = null;
+        $user->daily_calories_target = null;
+        $user->protein_g = null;
+        $user->fat_g = null;
+        $user->carbs_g = null;
+        $user->water_goal_ml = null;
+        $user->before_photo_file_id = null;
+        $user->next_progress_photo_at = null;
+        $user->onboarding_step = OnboardingStep::AskGender->value;
+        $user->save();
     }
 
     private function handleOnboardingCallback(User $user, int $chatId, string $data): void
