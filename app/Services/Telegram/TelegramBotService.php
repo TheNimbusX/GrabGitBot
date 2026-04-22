@@ -32,6 +32,39 @@ class TelegramBotService
         return Http::withOptions($this->httpOptions());
     }
 
+    /** @return array<string, mixed>|null */
+    public function getMe(): ?array
+    {
+        try {
+            $response = $this->http()
+                ->connectTimeout(15)
+                ->timeout(30)
+                ->get($this->apiUrl('getMe'));
+        } catch (Throwable $e) {
+            Log::warning('Telegram getMe exception', ['message' => $e->getMessage()]);
+
+            return null;
+        }
+
+        if (! $response->successful()) {
+            Log::warning('Telegram getMe HTTP error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return null;
+        }
+
+        $json = $response->json();
+        if (! ($json['ok'] ?? false)) {
+            Log::warning('Telegram getMe not ok', ['body' => $json]);
+
+            return null;
+        }
+
+        return is_array($json['result'] ?? null) ? $json['result'] : null;
+    }
+
     public function sendMessage(int $chatId, string $text, ?array $replyMarkup = null, ?string $parseMode = 'HTML'): void
     {
         $payload = [

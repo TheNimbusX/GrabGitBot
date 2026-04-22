@@ -24,6 +24,18 @@ class TelegramPollCommand extends Command
             return self::FAILURE;
         }
 
+        $me = $telegram->getMe();
+        if ($me === null) {
+            $this->error('Telegram getMe не прошёл — неверный токен или кэш конфига устарел.');
+            $this->line('На сервере: docker compose exec app php artisan config:clear && docker compose exec app php artisan config:cache');
+            $this->line('Убедись, что тот же токен, что в getWebhookInfo / BotFather.');
+
+            return self::FAILURE;
+        }
+        $this->info(
+            'Бот: @'.($me['username'] ?? '?').' (id '.($me['id'] ?? '?').').'
+        );
+
         if (config('telegram.http_proxy')) {
             $this->info('Используется TELEGRAM_HTTP_PROXY.');
         } else {
@@ -50,6 +62,9 @@ class TelegramPollCommand extends Command
         while (true) {
             try {
                 $updates = $telegram->getUpdates($offset, $timeout);
+                if ($updates !== []) {
+                    $this->info('Апдейтов: '.count($updates));
+                }
                 foreach ($updates as $u) {
                     try {
                         $fitBot->handleUpdate($u);
