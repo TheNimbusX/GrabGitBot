@@ -721,14 +721,15 @@ class FitBotService
         }
 
         if ($axis === 'workout') {
-            $variant = WorkoutCheckVariant::tryFrom($ratingVal);
+            $variant = WorkoutCheckVariant::tryFrom($ratingVal)
+                ?? ($ratingVal === 'walk' ? WorkoutCheckVariant::Skipped : null);
             if (! $variant) {
                 return;
             }
             $check->workout_variant = $variant->value;
             $check->workout_rating = match ($variant) {
-                WorkoutCheckVariant::Trained => CheckRating::Green->value,
-                WorkoutCheckVariant::Rest, WorkoutCheckVariant::Walk => CheckRating::Yellow->value,
+                WorkoutCheckVariant::Trained, WorkoutCheckVariant::Rest => CheckRating::Green->value,
+                WorkoutCheckVariant::Skipped => CheckRating::Red->value,
             };
             $check->save();
             $this->finalizeOrContinueCheck($user, $chatId, $check);
@@ -922,7 +923,7 @@ class FitBotService
         if (! $check->workout_rating) {
             $this->telegram->sendMessage(
                 $chatId,
-                '💪 <b>Движение сегодня</b>'."\n\n".'Что из этого ближе?',
+                '💪 <b>Движение сегодня</b>',
                 $this->workoutVariantKeyboard((int) $check->id)
             );
 
@@ -961,7 +962,7 @@ class FitBotService
         return $this->telegram->inlineKeyboard([
             [['text' => '💪 Позанимался', 'callback_data' => $p.WorkoutCheckVariant::Trained->value]],
             [['text' => '😴 День отдыха', 'callback_data' => $p.WorkoutCheckVariant::Rest->value]],
-            [['text' => '🚶 Прогулялся', 'callback_data' => $p.WorkoutCheckVariant::Walk->value]],
+            [['text' => '❌ Прогулял (пропустил тренировку)', 'callback_data' => $p.WorkoutCheckVariant::Skipped->value]],
         ]);
     }
 

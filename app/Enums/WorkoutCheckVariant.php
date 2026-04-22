@@ -6,14 +6,15 @@ enum WorkoutCheckVariant: string
 {
     case Trained = 'trained';
     case Rest = 'rest';
-    case Walk = 'walk';
+    /** Пропустил тренировку без уважительной причины — хуже двух других вариантов. */
+    case Skipped = 'skipped';
 
     public function labelRu(): string
     {
         return match ($this) {
             self::Trained => 'Позанимался',
             self::Rest => 'День отдыха',
-            self::Walk => 'Прогулялся',
+            self::Skipped => 'Прогулял (пропустил тренировку)',
         };
     }
 }

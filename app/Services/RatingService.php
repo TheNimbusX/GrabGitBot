@@ -23,36 +23,36 @@ class RatingService
         return $enum?->points() ?? 0;
     }
 
-    /** Оценка сна по фактическим часам и цели из анкеты. */
+    /**
+     * Оценка сна: заметно ниже цели — плохо; чуть не доспал (например 7 ч при цели 9) — нормально;
+     * близко к цели или лучше — хорошо.
+     */
     public function sleepRatingFromHours(float $actualHours, float $targetHours): CheckRating
     {
         $target = max(4.0, min(12.0, $targetHours));
         $actualHours = max(0.0, min(16.0, $actualHours));
 
-        if ($actualHours < $target - 1.2) {
+        if ($actualHours < $target - 2.5 || $actualHours < 4.5) {
             return CheckRating::Red;
         }
-        if ($actualHours <= $target + 1.0) {
+        if ($actualHours >= $target - 1.0) {
             return CheckRating::Green;
-        }
-        if ($actualHours <= $target + 2.5) {
-            return CheckRating::Yellow;
         }
 
         return CheckRating::Yellow;
     }
 
-    /** Оценка воды по фактически выпитому объёму и цели из плана. */
+    /** Вода: ≥90% цели — хорошо, ≥60% — нормально, иначе плохо. */
     public function waterRatingFromMl(int $actualMl, int $goalMl): CheckRating
     {
         $goalMl = max(500, $goalMl);
         $actualMl = max(0, $actualMl);
         $ratio = $actualMl / $goalMl;
 
-        if ($ratio >= 0.92) {
+        if ($ratio >= 0.90) {
             return CheckRating::Green;
         }
-        if ($ratio >= 0.65) {
+        if ($ratio >= 0.60) {
             return CheckRating::Yellow;
         }
 
