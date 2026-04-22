@@ -26,9 +26,9 @@ class TelegramPollCommand extends Command
 
         $me = $telegram->getMe();
         if ($me === null) {
-            $this->error('Telegram getMe не прошёл — неверный токен или кэш конфига устарел.');
-            $this->line('На сервере: docker compose exec app php artisan config:clear && docker compose exec app php artisan config:cache');
-            $this->line('Убедись, что тот же токен, что в getWebhookInfo / BotFather.');
+            $this->error('Telegram getMe не прошёл.');
+            $this->line('Если в storage/logs/laravel.log — cURL error 28 (timeout) до api.telegram.org: с этого VPS нет исходящего доступа к Bot API (как на части РФ/KZ-сетей). Нужны TELEGRAM_HTTP_PROXY, VPN или VPS в другом регионе.');
+            $this->line('Если в логе HTTP 401 — неверный TELEGRAM_BOT_TOKEN или устарел config:cache (php artisan config:clear && php artisan config:cache).');
 
             return self::FAILURE;
         }
