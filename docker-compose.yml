@@ -1,10 +1,14 @@
+# Продакшен: в .env — APP_DOMAIN, APP_URL, DB_HOST=mysql, TELEGRAM_BOT_TOKEN, APP_DEBUG=false.
+# Если порты 80/443 заняты (Apache/cPanel), задай CADDY_HTTP_PORT=8080 и CADDY_HTTPS_PORT=8443
+# (у Telegram для вебхука допустимы в т.ч. 443, 80, 88, 8443).
+
 services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
     volumes:

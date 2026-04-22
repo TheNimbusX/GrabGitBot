@@ -15,6 +15,7 @@ if [ ! -f vendor/autoload.php ]; then
 fi
 
 php artisan package:discover --ansi || true
+php artisan config:clear || true
 php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
