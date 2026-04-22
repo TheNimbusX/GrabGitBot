@@ -15,9 +15,12 @@ class User extends Authenticatable
         'username',
         'first_name',
         'last_name',
+        'age',
         'onboarding_step',
         'weight_kg',
         'height_cm',
+        'gender',
+        'activity_level',
         'goal',
         'experience',
         'sleep_target_hours',
@@ -38,6 +41,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'weight_kg' => 'float',
+        'age' => 'integer',
         'height_cm' => 'integer',
         'sleep_target_hours' => 'float',
         'daily_calories_target' => 'integer',

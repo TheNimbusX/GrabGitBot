@@ -2,9 +2,11 @@
 
 namespace App\Services\FitBot;
 
+use App\Enums\ActivityLevel;
 use App\Enums\CheckRating;
 use App\Enums\ExperienceLevel;
 use App\Enums\FitnessGoal;
+use App\Enums\Gender;
 use App\Enums\OnboardingStep;
 use App\Enums\PhotoType;
 use App\Models\DailyCheck;
@@ -152,14 +154,20 @@ class FitBotService
         }
 
         match ($user->onboardingStepEnum()) {
+            OnboardingStep::AskGender => $this->askGender($chatId),
+            OnboardingStep::AskAge => $this->telegram->sendMessage(
+                $chatId,
+                'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.'
+            ),
             OnboardingStep::AskWeight => $this->telegram->sendMessage(
                 $chatId,
-                'Привет! Давай настроим профиль. Введи свой <b>вес в кг</b> (например 75.5).'
+                'Введи <b>вес в кг</b> (например 75.5).'
             ),
             OnboardingStep::AskHeight => $this->telegram->sendMessage(
                 $chatId,
-                'Продолжим: введи <b>рост в см</b> (например 180).'
+                'Введи <b>рост в см</b> (например 180).'
             ),
+            OnboardingStep::AskActivity => $this->askActivity($chatId),
             OnboardingStep::AskGoal => $this->askGoal($chatId),
             OnboardingStep::AskExperience => $this->askExperience($chatId),
             OnboardingStep::AskSleep => $this->telegram->sendMessage(
@@ -223,7 +231,7 @@ class FitBotService
         }
 
         $text = $this->rating->formatSummaryMessage($user);
-        $this->telegram->sendMessage($chatId, e($text), $this->mainMenuKeyboard(), null);
+        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard(), null);
     }
 
     /** @return array<string, mixed> */
@@ -247,6 +255,35 @@ class FitBotService
             return;
         }
         [, $key, $value] = $parts;
+
+        if ($key === 'gender') {
+            $gender = Gender::tryFrom($value);
+            if (! $gender) {
+                return;
+            }
+            $user->gender = $gender->value;
+            $user->onboarding_step = OnboardingStep::AskAge->value;
+            $user->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.'
+            );
+
+            return;
+        }
+
+        if ($key === 'activity') {
+            $act = ActivityLevel::tryFrom($value);
+            if (! $act) {
+                return;
+            }
+            $user->activity_level = $act->value;
+            $user->onboarding_step = OnboardingStep::AskGoal->value;
+            $user->save();
+            $this->askGoal($chatId);
+
+            return;
+        }
 
         if ($key === 'goal') {
             $goal = FitnessGoal::tryFrom($value);
@@ -287,6 +324,7 @@ class FitBotService
     private function handleOnboardingText(User $user, int $chatId, OnboardingStep $step, string $text): void
     {
         match ($step) {
+            OnboardingStep::AskAge => $this->onboardingAge($user, $chatId, $text),
             OnboardingStep::AskWeight => $this->onboardingWeight($user, $chatId, $text),
             OnboardingStep::AskHeight => $this->onboardingHeight($user, $chatId, $text),
             OnboardingStep::AskSleep => $this->onboardingSleep($user, $chatId, $text),
@@ -308,6 +346,20 @@ class FitBotService
         $this->telegram->sendMessage($chatId, 'Отлично. Теперь <b>рост в см</b> (например 180).');
     }
 
+    private function onboardingAge(User $user, int $chatId, string $text): void
+    {
+        $age = $this->parseInt($text);
+        if ($age === null || $age < 14 || $age > 100) {
+            $this->telegram->sendMessage($chatId, 'Укажи возраст числом <b>от 14 до 100</b> лет.');
+
+            return;
+        }
+        $user->age = $age;
+        $user->onboarding_step = OnboardingStep::AskWeight->value;
+        $user->save();
+        $this->telegram->sendMessage($chatId, 'Принято. Теперь <b>вес в кг</b> (например 75.5).');
+    }
+
     private function onboardingHeight(User $user, int $chatId, string $text): void
     {
         $h = $this->parseInt($text);
@@ -317,9 +369,9 @@ class FitBotService
             return;
         }
         $user->height_cm = $h;
-        $user->onboarding_step = OnboardingStep::AskGoal->value;
+        $user->onboarding_step = OnboardingStep::AskActivity->value;
         $user->save();
-        $this->askGoal($chatId);
+        $this->askActivity($chatId);
     }
 
     private function onboardingSleep(User $user, int $chatId, string $text): void
@@ -339,6 +391,35 @@ class FitBotService
             $this->telegram->inlineKeyboard([
                 [['text' => 'Пропустить фото', 'callback_data' => 'onb:photo:skip']],
             ])
+        );
+    }
+
+    private function askGender(int $chatId): void
+    {
+        $this->telegram->sendMessage(
+            $chatId,
+            'Какой у тебя <b>пол</b>? От этого зависят расчёт калорий/БЖУ и пример тренировок.',
+            $this->telegram->inlineKeyboard([
+                [['text' => 'Мужской', 'callback_data' => 'onb:gender:'.Gender::Male->value]],
+                [['text' => 'Женский', 'callback_data' => 'onb:gender:'.Gender::Female->value]],
+            ])
+        );
+    }
+
+    private function askActivity(int $chatId): void
+    {
+        $lines = ['Какая у тебя <b>повседневная активность</b>? Это влияет на калории.', ''];
+        foreach (ActivityLevel::cases() as $a) {
+            $lines[] = '• <b>'.$a->labelRu().'</b> — '.$a->descriptionRu();
+        }
+        $rows = [];
+        foreach (ActivityLevel::cases() as $a) {
+            $rows[] = [['text' => $a->labelRu(), 'callback_data' => 'onb:activity:'.$a->value]];
+        }
+        $this->telegram->sendMessage(
+            $chatId,
+            implode("\n", $lines),
+            $this->telegram->inlineKeyboard($rows)
         );
     }
 
@@ -479,7 +560,7 @@ class FitBotService
     {
         $user = User::query()->firstOrNew(['telegram_id' => $telegramId]);
         if (! $user->exists) {
-            $user->onboarding_step = OnboardingStep::AskWeight->value;
+            $user->onboarding_step = OnboardingStep::AskGender->value;
         }
         $user->username = $from['username'] ?? null;
         $user->first_name = $from['first_name'] ?? null;

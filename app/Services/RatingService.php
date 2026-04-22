@@ -142,15 +142,47 @@ class RatingService
     public function formatSummaryMessage(User $user, ?Carbon $now = null): string
     {
         $s = $this->summary($user, $now);
+        $streak = $this->checkInStreakDays($user, $now);
         $lines = [
             'Твой рейтинг дисциплины:',
             '• Сегодня: '.$s['day'].' / '.self::MAX_DAILY_POINTS,
             '• Неделя: '.$s['week'].' баллов',
             '• Месяц: '.$s['month'].' баллов',
+            '• Дней в ударе (чек-ины подряд): <b>'.$streak.'</b>',
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
         ];
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Подряд идущие календарные дни с завершённым чек-ином.
+     * Если сегодня ещё не отмечен — счёт начинается с вчера.
+     */
+    public function checkInStreakDays(User $user, ?Carbon $now = null): int
+    {
+        $now ??= Carbon::now();
+        $streak = 0;
+        $day = $now->copy()->startOfDay();
+
+        if (! $this->hasCompletedCheckOnDate($user, $day)) {
+            $day->subDay();
+        }
+
+        while ($this->hasCompletedCheckOnDate($user, $day)) {
+            $streak++;
+            $day->subDay();
+        }
+
+        return $streak;
+    }
+
+    private function hasCompletedCheckOnDate(User $user, Carbon $day): bool
+    {
+        return $user->dailyChecks()
+            ->whereDate('check_date', $day->toDateString())
+            ->where('is_completed', true)
+            ->exists();
     }
 }
