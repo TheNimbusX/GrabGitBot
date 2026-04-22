@@ -69,6 +69,59 @@ class TelegramBotService
         ];
     }
 
+    public function deleteWebhook(bool $dropPendingUpdates = true): bool
+    {
+        $response = Http::asForm()->post($this->apiUrl('deleteWebhook'), [
+            'drop_pending_updates' => $dropPendingUpdates ? 'true' : 'false',
+        ]);
+
+        if (! $response->successful()) {
+            Log::warning('Telegram deleteWebhook failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return false;
+        }
+
+        return (bool) ($response->json('ok'));
+    }
+
+    /**
+     * Long polling: держит соединение до timeout секунд (макс. 50).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getUpdates(int $offset, int $timeout = 50): array
+    {
+        $timeout = max(0, min(50, $timeout));
+        $response = Http::timeout($timeout + 20)
+            ->asForm()
+            ->post($this->apiUrl('getUpdates'), [
+                'offset' => $offset,
+                'timeout' => $timeout,
+                'allowed_updates' => json_encode(['message', 'callback_query']),
+            ]);
+
+        if (! $response->successful()) {
+            Log::warning('Telegram getUpdates HTTP error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [];
+        }
+
+        $json = $response->json();
+        if (! ($json['ok'] ?? false)) {
+            Log::warning('Telegram getUpdates not ok', ['body' => $json]);
+
+            return [];
+        }
+
+        return $json['result'] ?? [];
+    }
+
     private function post(string $method, array $payload): void
     {
         $response = Http::asJson()->post($this->apiUrl($method), $payload);

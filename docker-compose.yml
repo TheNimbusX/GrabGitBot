@@ -41,6 +41,20 @@ services:
       mysql:
         condition: service_healthy
 
+  # Long polling вместо webhook (удобно для РФ-VPS, если входящий webhook от Telegram не доходит).
+  telegram-poll:
+    build: .
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    command: ["php", "artisan", "telegram:poll", "--no-interaction"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      app:
+        condition: service_started
+
   mysql:
     image: mysql:8.0
     restart: unless-stopped
