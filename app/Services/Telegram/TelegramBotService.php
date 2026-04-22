@@ -214,6 +214,17 @@ class TelegramBotService
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
+
+            return;
+        }
+
+        $json = $response->json();
+        if (! ($json['ok'] ?? false)) {
+            Log::warning('Telegram API ok=false', [
+                'method' => $method,
+                'description' => $json['description'] ?? null,
+                'body' => $response->body(),
+            ]);
         }
     }
 }

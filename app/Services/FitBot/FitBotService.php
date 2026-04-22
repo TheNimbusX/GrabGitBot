@@ -61,12 +61,18 @@ class FitBotService
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
                 '/rating' => $this->cmdRating($user, $chatId),
-                '/settings' => $this->cmdSettings($user, $chatId),
+                '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    'Неизвестная команда. Команды: /start, /check, /rating, /settings'
+                    'Неизвестная команда. Команды: /start, /check, /rating, /settings (или /настройки)'
                 ),
             };
+
+            return;
+        }
+
+        if ($text !== '' && $this->isPlainSettingsRequest($text)) {
+            $this->cmdSettings($user, $chatId);
 
             return;
         }
@@ -252,12 +258,14 @@ class FitBotService
 
     private function cmdSettings(User $user, int $chatId): void
     {
+        // Без HTML: иначе при ошибке разбора сущностей Telegram отвечает ok=false при HTTP 200 — сообщение не уходит.
         $this->telegram->sendMessage(
             $chatId,
-            '<b>Настройки</b>'."\n\n"
-            .'• <b>Сменить анкету</b> — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.'."\n"
-            .'• <b>Удалить аккаунт</b> — сотрутся все чек-ины, фото и цели. Потом можно снова /start.',
-            $this->settingsMenuKeyboard()
+            "⚙️ Настройки\n\n"
+            ."• Сменить анкету — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.\n"
+            .'• Удалить аккаунт — сотрутся все чек-ины, фото и цели. Потом снова /start.',
+            $this->settingsMenuKeyboard(),
+            null
         );
     }
 
@@ -798,8 +806,21 @@ class FitBotService
     /** Telegram шлёт команды как /settings@BotName — убираем суффикс бота. */
     private function normalizeBotCommand(string $text): string
     {
-        $token = strtolower(Str::before(trim($text), ' '));
+        $token = Str::lower(Str::before(trim($text), ' '));
 
         return str_contains($token, '@') ? Str::before($token, '@') : $token;
+    }
+
+    private function isPlainSettingsRequest(string $text): bool
+    {
+        $plain = Str::lower(trim($text));
+
+        return in_array($plain, [
+            'settings',
+            'setting',
+            'сеттингс',
+            'настройки',
+            'опции',
+        ], true);
     }
 }
