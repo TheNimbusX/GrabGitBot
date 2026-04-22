@@ -12,9 +12,9 @@ class TelegramPollCommand extends Command
 {
     protected $signature = 'telegram:poll
                             {--timeout=50 : Long polling, секунды 0–50}
-                            {--keep-webhook : Не вызывать deleteWebhook (если вебхук уже снят вручную)}';
+                            {--keep-webhook : Не вызывать deleteWebhook (сними вебхук вручную с ПК, если с VPS api.telegram.org недоступен)}';
 
-    protected $description = 'Long polling Telegram: getUpdates в цикле (для VPS, где вебхук с Telegram не доходит)';
+    protected $description = 'Long polling Telegram: getUpdates в цикле (для VPS, где вебхук от Telegram не доходит)';
 
     public function handle(FitBotService $fitBot, TelegramBotService $telegram): int
     {
@@ -24,12 +24,20 @@ class TelegramPollCommand extends Command
             return self::FAILURE;
         }
 
+        if (config('telegram.http_proxy')) {
+            $this->info('Используется TELEGRAM_HTTP_PROXY.');
+        } else {
+            $this->warn('Без TELEGRAM_HTTP_PROXY: если до api.telegram.org таймаут — задай прокси в .env или VPS за РФ.');
+        }
+
         if (! $this->option('keep-webhook')) {
             $this->info('Снимаю webhook (drop_pending_updates=true)...');
             if ($telegram->deleteWebhook(true)) {
                 $this->info('Webhook снят.');
             } else {
-                $this->warn('deleteWebhook вернул ошибку — проверь токен и сеть до api.telegram.org');
+                $this->warn('deleteWebhook с VPS не прошёл. Открой с ПК (подставь токен):');
+                $this->line('https://api.telegram.org/bot<ТОКЕН>/deleteWebhook?drop_pending_updates=true');
+                $this->line('Затем: docker compose run --rm app php artisan telegram:poll --keep-webhook');
             }
         }
 

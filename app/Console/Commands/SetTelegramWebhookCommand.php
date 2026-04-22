@@ -35,10 +35,21 @@ class SetTelegramWebhookCommand extends Command
             $payload['secret_token'] = $secret;
         }
 
-        $response = Http::asForm()->post(
-            'https://api.telegram.org/bot'.$token.'/setWebhook',
-            $payload
-        );
+        $options = array_filter(['proxy' => config('telegram.http_proxy')]);
+        try {
+            $response = Http::withOptions($options)
+                ->connectTimeout(20)
+                ->timeout(120)
+                ->asForm()
+                ->post('https://api.telegram.org/bot'.$token.'/setWebhook', $payload);
+        } catch (\Throwable $e) {
+            $this->error('Запрос к Telegram: '.$e->getMessage());
+            if (empty($options)) {
+                $this->warn('Попробуй TELEGRAM_HTTP_PROXY в .env или выставь вебхук с машины, где api.telegram.org доступен.');
+            }
+
+            return self::FAILURE;
+        }
 
         if (! $response->successful()) {
             $this->error('HTTP '.$response->status().': '.$response->body());

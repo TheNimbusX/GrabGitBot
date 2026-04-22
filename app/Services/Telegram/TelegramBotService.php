@@ -2,8 +2,10 @@
 
 namespace App\Services\Telegram;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TelegramBotService
 {
@@ -12,6 +14,22 @@ class TelegramBotService
         $token = (string) config('telegram.bot_token');
 
         return 'https://api.telegram.org/bot'.$token.'/'.$method;
+    }
+
+    /** @return array<string, mixed> */
+    private function httpOptions(): array
+    {
+        $proxy = config('telegram.http_proxy');
+        if ($proxy === null || $proxy === '') {
+            return [];
+        }
+
+        return ['proxy' => $proxy];
+    }
+
+    private function http(): PendingRequest
+    {
+        return Http::withOptions($this->httpOptions());
     }
 
     public function sendMessage(int $chatId, string $text, ?array $replyMarkup = null, ?string $parseMode = 'HTML'): void
@@ -71,9 +89,19 @@ class TelegramBotService
 
     public function deleteWebhook(bool $dropPendingUpdates = true): bool
     {
-        $response = Http::asForm()->post($this->apiUrl('deleteWebhook'), [
-            'drop_pending_updates' => $dropPendingUpdates ? 'true' : 'false',
-        ]);
+        try {
+            $response = $this->http()
+                ->connectTimeout(20)
+                ->timeout(120)
+                ->asForm()
+                ->post($this->apiUrl('deleteWebhook'), [
+                    'drop_pending_updates' => $dropPendingUpdates ? 'true' : 'false',
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('Telegram deleteWebhook exception', ['message' => $e->getMessage()]);
+
+            return false;
+        }
 
         if (! $response->successful()) {
             Log::warning('Telegram deleteWebhook failed', [
@@ -95,13 +123,21 @@ class TelegramBotService
     public function getUpdates(int $offset, int $timeout = 50): array
     {
         $timeout = max(0, min(50, $timeout));
-        $response = Http::timeout($timeout + 20)
-            ->asForm()
-            ->post($this->apiUrl('getUpdates'), [
-                'offset' => $offset,
-                'timeout' => $timeout,
-                'allowed_updates' => json_encode(['message', 'callback_query']),
-            ]);
+        try {
+            $response = $this->http()
+                ->connectTimeout(20)
+                ->timeout($timeout + 30)
+                ->asForm()
+                ->post($this->apiUrl('getUpdates'), [
+                    'offset' => $offset,
+                    'timeout' => $timeout,
+                    'allowed_updates' => json_encode(['message', 'callback_query']),
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('Telegram getUpdates exception', ['message' => $e->getMessage()]);
+
+            return [];
+        }
 
         if (! $response->successful()) {
             Log::warning('Telegram getUpdates HTTP error', [
@@ -124,7 +160,20 @@ class TelegramBotService
 
     private function post(string $method, array $payload): void
     {
-        $response = Http::asJson()->post($this->apiUrl($method), $payload);
+        try {
+            $response = $this->http()
+                ->connectTimeout(20)
+                ->timeout(120)
+                ->asJson()
+                ->post($this->apiUrl($method), $payload);
+        } catch (Throwable $e) {
+            Log::warning('Telegram API exception', [
+                'method' => $method,
+                'message' => $e->getMessage(),
+            ]);
+
+            return;
+        }
 
         if (! $response->successful()) {
             Log::warning('Telegram API error', [
