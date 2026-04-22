@@ -77,6 +77,24 @@ class FitBotService
             return;
         }
 
+        if ($text !== '') {
+            $menuAction = $this->replyMenuAction($text);
+            if ($menuAction !== null) {
+                match ($menuAction) {
+                    'check' => $this->cmdCheck($user, $chatId),
+                    'rating' => $this->cmdRating($user, $chatId),
+                    'settings' => $this->cmdSettings($user, $chatId),
+                    'plan_ai' => $this->telegram->sendMessage(
+                        $chatId,
+                        'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
+                        $this->mainMenuKeyboard()
+                    ),
+                };
+
+                return;
+            }
+        }
+
         if (! empty($msg['photo']) && $user->onboardingStepEnum() === OnboardingStep::AskBeforePhoto) {
             $fileId = (string) $msg['photo'][array_key_last($msg['photo'])]['file_id'];
             $this->finishOnboardingWithOptionalPhoto($user, $chatId, $fileId);
@@ -100,7 +118,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Выбери действие в меню или команды: /check, /rating, /settings',
+                'Выбери действие кнопками внизу или команды: /check, /rating, /settings',
                 $this->mainMenuKeyboard()
             );
         }
@@ -253,7 +271,7 @@ class FitBotService
         }
 
         $text = $this->rating->formatSummaryMessage($user);
-        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard(), null);
+        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
     }
 
     private function cmdSettings(User $user, int $chatId): void
@@ -269,19 +287,18 @@ class FitBotService
         );
     }
 
+    /** Нижняя (reply) клавиатура — кнопки «Настройки» и остальное всегда видны под полем ввода. */
     /** @return array<string, mixed> */
     private function mainMenuKeyboard(): array
     {
-        return $this->telegram->inlineKeyboard([
+        return $this->telegram->replyKeyboard([
             [
-                ['text' => 'Чек-ин', 'callback_data' => 'menu:check'],
-                ['text' => 'Рейтинг', 'callback_data' => 'menu:rating'],
+                ['text' => 'Чек-ин'],
+                ['text' => 'Рейтинг'],
+                ['text' => '⚙️ Настройки'],
             ],
             [
-                ['text' => '⚙️ Настройки', 'callback_data' => 'menu:settings'],
-            ],
-            [
-                ['text' => '👉 Персональный план (AI)', 'callback_data' => 'pay:ai'],
+                ['text' => '👉 Персональный план (AI)'],
             ],
         ]);
     }
@@ -302,7 +319,9 @@ class FitBotService
             $this->resetProfileForReonboarding($user);
             $this->telegram->sendMessage(
                 $chatId,
-                'Ок, начинаем анкету заново. История <b>чек-инов</b> остаётся; после нового онбординга пересчитаю калории и БЖУ.'
+                'Ок, начинаем анкету заново. История чек-инов остаётся; после нового онбординга пересчитаю калории и БЖУ.',
+                $this->telegram->replyKeyboardRemove(),
+                null
             );
             $this->askGender($chatId);
 
@@ -765,7 +784,8 @@ class FitBotService
 
         $this->telegram->sendMessage(
             $chatId,
-            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.'
+            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.',
+            $this->mainMenuKeyboard()
         );
     }
 
@@ -780,7 +800,11 @@ class FitBotService
         ]);
         $user->next_progress_photo_at = Carbon::now()->addDays(30);
         $user->save();
-        $this->telegram->sendMessage($chatId, 'Фото прогресса сохранено. Следующее напоминание через 30 дней.');
+        $this->telegram->sendMessage(
+            $chatId,
+            'Фото прогресса сохранено. Следующее напоминание через 30 дней.',
+            $this->mainMenuKeyboard()
+        );
     }
 
     private function parseFloat(string $text): ?float
@@ -822,5 +846,17 @@ class FitBotService
             'настройки',
             'опции',
         ], true);
+    }
+
+    /** Тексты с нижней (reply) клавиатуры главного меню. */
+    private function replyMenuAction(string $text): ?string
+    {
+        return match (trim($text)) {
+            'Чек-ин' => 'check',
+            'Рейтинг' => 'rating',
+            '⚙️ Настройки', 'Настройки' => 'settings',
+            '👉 Персональный план (AI)' => 'plan_ai',
+            default => null,
+        };
     }
 }

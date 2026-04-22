@@ -120,6 +120,32 @@ class TelegramBotService
         ];
     }
 
+    /**
+     * Обычная клавиатура под полем ввода (всегда на виду, в отличие от inline).
+     *
+     * @param list<list<array{text: string}>> $rows
+     * @return array<string, mixed>
+     */
+    public function replyKeyboard(array $rows, bool $resizeKeyboard = true): array
+    {
+        return [
+            'keyboard' => array_map(
+                fn (array $row) => array_map(
+                    fn (array $btn) => ['text' => $btn['text']],
+                    $row
+                ),
+                $rows
+            ),
+            'resize_keyboard' => $resizeKeyboard,
+        ];
+    }
+
+    /** @return array<string, bool> */
+    public function replyKeyboardRemove(): array
+    {
+        return ['remove_keyboard' => true];
+    }
+
     public function deleteWebhook(bool $dropPendingUpdates = true): bool
     {
         try {
