@@ -56,7 +56,7 @@ class FitBotService
 
         $text = trim((string) ($msg['text'] ?? ''));
         if ($text !== '' && Str::startsWith($text, '/')) {
-            $command = strtolower(Str::before($text, ' '));
+            $command = $this->normalizeBotCommand($text);
             match ($command) {
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
@@ -676,7 +676,8 @@ class FitBotService
             $check->save();
             $this->telegram->sendMessage(
                 $chatId,
-                'Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов.'
+                'Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов.',
+                $this->mainMenuKeyboard()
             );
 
             return;
@@ -694,7 +695,7 @@ class FitBotService
             $label = 'Питание сегодня?';
         } elseif (! $check->sleep_rating) {
             $axis = 'sleep';
-            $label = 'Сон сегодня?';
+            $label = 'Сон вчера?';
         } elseif (! $check->workout_rating) {
             $axis = 'workout';
             $label = 'Тренировка сегодня?';
@@ -792,5 +793,13 @@ class FitBotService
         }
 
         return (int) $normalized;
+    }
+
+    /** Telegram шлёт команды как /settings@BotName — убираем суффикс бота. */
+    private function normalizeBotCommand(string $text): string
+    {
+        $token = strtolower(Str::before(trim($text), ' '));
+
+        return str_contains($token, '@') ? Str::before($token, '@') : $token;
     }
 }
