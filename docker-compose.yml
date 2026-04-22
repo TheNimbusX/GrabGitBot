@@ -49,7 +49,9 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
-    command: ["php", "artisan", "telegram:poll", "--no-interaction", "--keep-webhook"]
+      - ./docker/php/poll-entrypoint.sh:/poll-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/poll-entrypoint.sh"]
+    command: ["--no-interaction", "--keep-webhook"]
     depends_on:
       mysql:
         condition: service_healthy
