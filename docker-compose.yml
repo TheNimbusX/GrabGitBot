@@ -30,8 +30,9 @@ services:
   app:
     build: .
     restart: unless-stopped
-    env_file:
-      - .env
+    # Не используем env_file: тогда Docker кладёт APP_KEY в окружение до Laravel;
+    # dotenv immutable не перезаписывает его — при base64 с «=» в конце ключ часто пустой.
+    # Laravel читает ./.env с примонтированного тома сам.
     volumes:
       - ./:/var/www/html
       - ./docker/php/entrypoint.sh:/entrypoint.sh:ro
