@@ -43,8 +43,9 @@ class FitBotService
             return;
         }
 
-        if (isset($u['message'])) {
-            $this->handleMessage($u['message']);
+        $msg = $u['message'] ?? $u['edited_message'] ?? null;
+        if ($msg !== null) {
+            $this->handleMessage($msg);
         }
     }
 
@@ -244,6 +245,7 @@ class FitBotService
         }
 
         $user = $this->syncUser($telegramId, $from);
+        $this->touchLastMessageToBot($user, null);
         $this->telegram->answerCallbackQuery($cq['id']);
 
         if ($data === 'menu:check') {
@@ -2051,7 +2053,11 @@ class FitBotService
         return $user;
     }
 
-    /** Время из Telegram message.date (UTC). Не уменьшаем поле при редких поздних доставках. */
+    /**
+     * Последняя активность пользователя в чате с ботом: входящее message (date из Telegram, UTC)
+     * или callback / серверное время (now), если даты сообщения нет.
+     * Не уменьшаем поле при редких старых апдейтах.
+     */
     private function touchLastMessageToBot(User $user, ?int $telegramUnixDate = null): void
     {
         $at = $telegramUnixDate !== null
