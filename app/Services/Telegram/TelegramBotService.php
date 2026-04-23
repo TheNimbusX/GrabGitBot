@@ -2,6 +2,8 @@
 
 namespace App\Services\Telegram;
 
+use App\Models\TelegramOutboundMessage;
+use App\Models\User;
 use GuzzleHttp\Client;
 use GuzzleHttp\RequestOptions;
 use Illuminate\Http\Client\PendingRequest;
@@ -123,7 +125,84 @@ class TelegramBotService
             unset($payload['parse_mode']);
         }
 
-        $this->post('sendMessage', $payload);
+        $json = $this->postJson('sendMessage', $payload);
+        if (! is_array($json) || ! ($json['ok'] ?? false)) {
+            return;
+        }
+        $result = $json['result'] ?? null;
+        if (is_array($result) && isset($result['message_id'])) {
+            $this->recordOutboundChatMessageIfKnownUser($chatId, (int) $result['message_id']);
+        }
+    }
+
+    /**
+     * Удалить у пользователя сообщения бота, которые мы запомнили (sendMessage).
+     * Сообщения пользователя Telegram API не трогает.
+     *
+     * @param  list<int>  $extraMessageIds  Доп. id (например только что отправленное прощание), если ещё не в БД.
+     */
+    public function deleteRecordedOutboundMessagesForUser(User $user, array $extraMessageIds = []): void
+    {
+        $chatId = (int) $user->telegram_id;
+        $fromDb = TelegramOutboundMessage::query()
+            ->where('user_id', $user->id)
+            ->pluck('message_id')
+            ->all();
+        $ids = array_values(array_unique(array_merge(
+            array_map('intval', $fromDb),
+            array_map('intval', $extraMessageIds)
+        )));
+        $this->deleteMessages($chatId, $ids);
+    }
+
+    /** @param  list<int>  $messageIds */
+    public function deleteMessages(int $chatId, array $messageIds): void
+    {
+        $messageIds = array_values(array_unique(array_filter(array_map('intval', $messageIds))));
+        if ($messageIds === []) {
+            return;
+        }
+
+        foreach (array_chunk($messageIds, 100) as $chunk) {
+            $json = $this->postJson('deleteMessages', [
+                'chat_id' => $chatId,
+                'message_ids' => $chunk,
+            ]);
+            if (! is_array($json) || ! ($json['ok'] ?? false)) {
+                foreach ($chunk as $mid) {
+                    $this->post('deleteMessage', ['chat_id' => $chatId, 'message_id' => $mid]);
+                }
+            }
+        }
+    }
+
+    private function recordOutboundChatMessageIfKnownUser(int $chatId, int $messageId): void
+    {
+        $user = User::query()->where('telegram_id', $chatId)->first();
+        if ($user === null) {
+            return;
+        }
+
+        try {
+            TelegramOutboundMessage::query()->insertOrIgnore([
+                'user_id' => $user->id,
+                'message_id' => $messageId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('telegram outbound message log failed', ['message' => $e->getMessage()]);
+        }
+
+        $overflowIds = TelegramOutboundMessage::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('id')
+            ->skip(800)
+            ->take(5000)
+            ->pluck('id');
+        if ($overflowIds->isNotEmpty()) {
+            TelegramOutboundMessage::query()->whereIn('id', $overflowIds)->delete();
+        }
     }
 
     public function answerCallbackQuery(string $callbackQueryId, ?string $text = null): void
@@ -281,6 +360,12 @@ class TelegramBotService
 
     private function post(string $method, array $payload): void
     {
+        $this->postJson($method, $payload);
+    }
+
+    /** @return array<string, mixed>|null Полный JSON ответа или null при сетевой/HTTP ошибке. */
+    private function postJson(string $method, array $payload): ?array
+    {
         try {
             $response = $this->botJsonClient()->post($method, [RequestOptions::JSON => $payload]);
         } catch (Throwable $e) {
@@ -289,7 +374,7 @@ class TelegramBotService
                 'message' => $e->getMessage(),
             ]);
 
-            return;
+            return null;
         }
 
         $status = $response->getStatusCode();
@@ -302,16 +387,24 @@ class TelegramBotService
                 'body' => $body,
             ]);
 
-            return;
+            return null;
         }
 
         $json = json_decode($body, true);
-        if (! is_array($json) || ! ($json['ok'] ?? false)) {
+        if (! is_array($json)) {
+            Log::warning('Telegram API invalid JSON', ['method' => $method, 'body' => $body]);
+
+            return null;
+        }
+
+        if (! ($json['ok'] ?? false)) {
             Log::warning('Telegram API ok=false', [
                 'method' => $method,
-                'description' => is_array($json) ? ($json['description'] ?? null) : null,
+                'description' => $json['description'] ?? null,
                 'body' => $body,
             ]);
         }
+
+        return $json;
     }
 }
