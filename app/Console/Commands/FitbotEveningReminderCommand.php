@@ -16,7 +16,7 @@ class FitbotEveningReminderCommand extends Command
 {
     protected $signature = 'fitbot:evening-reminder {--follow-up : Жёсткое напоминание тем, кто получил мягкое ~10 мин назад и всё ещё без чек-ина}';
 
-    protected $description = 'Вечернее напоминание: чек-ин не завершён сегодня (мягкое; с --follow-up — второе сообщение)';
+    protected $description = 'Вечернее напоминание: чек-ин не завершён сегодня (мягкое; с --follow-up - второе сообщение)';
 
     public function handle(TelegramBotService $telegram, RatingService $rating): int
     {

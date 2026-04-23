@@ -14,7 +14,7 @@ class FitbotMorningMotivationCommand extends Command
 {
     protected $signature = 'fitbot:morning-motivation';
 
-    protected $description = 'Утро: мягкий тон 1–2 день, крючок 3–6, день 7 — отдельный сценарий, дальше — ровный пул';
+    protected $description = 'Утро: мягкий тон 1-2 день, крючок 3-6, день 7 отдельно, дальше ровный пул';
 
     public function handle(TelegramBotService $telegram): int
     {

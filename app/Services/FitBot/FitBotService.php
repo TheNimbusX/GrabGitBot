@@ -577,7 +577,7 @@ class FitBotService
             Cache::put($this->deleteAccountCacheKey($user->telegram_id), 0, now()->addMinutes(15));
             $this->telegram->sendMessage(
                 $chatId,
-                '<b>Удаление аккаунта — подтверждение 1 из 3</b>'."\n\n"
+                '<b>Удаление аккаунта - подтверждение 1 из 3</b>'."\n\n"
                 .'Будут безвозвратно удалены: чек-ины, фото, цели и вся анкета. Продолжить?',
                 $this->telegram->inlineKeyboard([
                     [
@@ -624,7 +624,7 @@ class FitBotService
                 Cache::put($key, 2, now()->addMinutes(15));
                 $this->telegram->sendMessage(
                     $chatId,
-                    '<b>Последнее подтверждение — 3 из 3</b>'."\n\n"
+                    '<b>Последнее подтверждение - 3 из 3</b>'."\n\n"
                     .'После этого аккаунт исчезнет. Нажми «Удалить навсегда», если решение окончательное.',
                     $this->telegram->inlineKeyboard([
                         [
@@ -1245,7 +1245,7 @@ class FitBotService
             FitBotMessaging::planChoiceText(),
             $this->telegram->inlineKeyboard([
                 [['text' => '📊 План от FitBot', 'callback_data' => 'onb:plan:'.UserPlanMode::Full->value]],
-                [['text' => '✅ Свой план — только дисциплина', 'callback_data' => 'onb:plan:'.UserPlanMode::Discipline->value]],
+                [['text' => '✅ Свой план - только дисциплина', 'callback_data' => 'onb:plan:'.UserPlanMode::Discipline->value]],
                 [['text' => '◀️ Назад', 'callback_data' => 'onb:back']],
             ])
         );
@@ -1274,7 +1274,7 @@ class FitBotService
     {
         $lines = [FitBotMessaging::onboardingActivityIntro(), ''];
         foreach (ActivityLevel::cases() as $a) {
-            $lines[] = '• <b>'.$a->labelRu().'</b> — '.$a->descriptionRu();
+            $lines[] = '• <b>'.$a->labelRu().'</b> - '.$a->descriptionRu();
         }
         $rows = [];
         foreach (ActivityLevel::cases() as $a) {
@@ -1336,8 +1336,6 @@ class FitBotService
         $user->refresh();
 
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
-        $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingDisciplineIntro());
-        $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingFreeVsProHint());
         $this->telegram->sendMessage(
             $chatId,
             FitBotMessaging::finishFullPlanFooter(),

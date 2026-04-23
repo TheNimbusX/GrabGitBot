@@ -133,7 +133,7 @@ class RatingService
             ->get();
 
         if ($checks->isEmpty()) {
-            return ['📭 Пока мало данных — отметь несколько чек-инов, и я подскажу, что чаще проседает.'];
+            return ['📭 Пока мало данных - отметь несколько чек-инов, и я подскажу, что чаще проседает.'];
         }
 
         $dimensions = [
@@ -163,21 +163,21 @@ class RatingService
 
         $hints = [];
         if ($lowestAvg < 1.5) {
-            $hints[] = '📉 Чаще всего проседает '.$dimensions[$lowestKey]['label'].' — можно чуть чаще обращать на это внимание.';
+            $hints[] = '📉 Чаще всего проседает '.$dimensions[$lowestKey]['label'].' - можно чуть чаще обращать на это внимание.';
         }
 
         $todayScore = $this->scoreForDay($user, $now);
         if ($todayScore >= self::MAX_DAILY_POINTS) {
-            $hints[] = '🌟 Сегодня максимум баллов — супер дисциплина!';
+            $hints[] = '🌟 Сегодня максимум баллов - супер дисциплина!';
         } elseif ($todayScore >= 7) {
-            $hints[] = '💪 Сегодня почти идеально — отличный день, так держать!';
+            $hints[] = '💪 Сегодня почти идеально - отличный день, так держать!';
         } elseif ($todayScore >= 5) {
             $hints[] = '✨ Хороший день: в целом всё неплохо, мелочи ещё можно подтянуть.';
         } elseif ($todayScore > 0) {
-            $hints[] = '📌 Баллы есть, но завтра можно сделать ровнее — без «досыпания вчера», только вперёд.';
+            $hints[] = '📌 Баллы есть, но завтра можно сделать ровнее - без «досыпания вчера», только вперёд.';
         }
 
-        return $hints ?: ['⚖️ Пока всё в балансе — продолжай в том же духе!'];
+        return $hints ?: ['⚖️ Пока всё в балансе - продолжай в том же духе!'];
     }
 
     /**
@@ -198,7 +198,7 @@ class RatingService
             ->count();
 
         if ($completedCount < 2) {
-            return 'закрепи <b>регулярный чек-ин</b> — тогда станет ясно, что тянуть в первую очередь.';
+            return 'закрепи <b>регулярный чек-ин</b> - увидишь, что тянуть первым.';
         }
 
         /** @var Collection<int, DailyCheck> $checks */
@@ -234,10 +234,10 @@ class RatingService
         $label = $dimensions[$lowestKey]['label'] ?? 'ритм';
 
         if ($lowestAvg >= 1.75) {
-            return 'держи <b>баланс и регулярность</b> — по последним дням оси ровные.';
+            return 'держи <b>баланс и регулярность</b> - по последним дням оси ровные.';
         }
 
-        return 'чуть чаще проседает <b>'.$label.'</b> — имеет смысл присмотреться к этой оси.';
+        return 'чуть чаще проседает <b>'.$label.'</b> - имеет смысл присмотреться к этой оси.';
     }
 
     /** Одна строка для чек-ина /rating: свой текст или авто по слабой оси за ~7 дней. */
@@ -351,7 +351,7 @@ class RatingService
 
         if ($checks28->isEmpty()) {
             return "📈 <b>Расширенная аналитика</b>\n\n"
-                .'Пока нет завершённых чек-инов — отметь хотя бы несколько дней, и здесь появятся цифры.';
+                .'Пока нет завершённых чек-инов - отметь хотя бы несколько дней, и здесь появятся цифры.';
         }
 
         $completedDays = $checks28->count();
@@ -389,7 +389,7 @@ class RatingService
                 $dimLines[] = $label.' <b>'.$avg.'</b>/2';
             }
         }
-        $dimBlock = $dimLines !== [] ? implode(' · ', $dimLines) : '—';
+        $dimBlock = $dimLines !== [] ? implode(' · ', $dimLines) : '-';
 
         $workoutCounts = [
             'trained' => 0,
@@ -413,7 +413,7 @@ class RatingService
             $label = $d->format('d.m');
             $has = $this->hasCompletedCheckOnDate($user, $d);
             $sc = $has ? $this->scoreForDay($user, $d) : null;
-            $last7Parts[] = $label.':'.($sc !== null ? '<b>'.$sc.'</b>' : '—');
+            $last7Parts[] = $label.':'.($sc !== null ? '<b>'.$sc.'</b>' : '-');
         }
         $last7Line = implode(' ', $last7Parts);
 
@@ -426,8 +426,8 @@ class RatingService
 
         $best = $checks28->sortByDesc('total_score')->first();
         $worst = $checks28->sortBy('total_score')->first();
-        $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '—';
-        $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '—';
+        $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '-';
+        $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '-';
 
         $lines = [
             '📈 <b>Расширенная аналитика</b>',
