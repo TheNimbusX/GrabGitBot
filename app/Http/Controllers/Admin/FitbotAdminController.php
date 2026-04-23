@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\RatingService;
+use App\Services\Admin\FitbotAdminDashboardService;
 use App\Services\Telegram\TelegramBotService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,38 +44,9 @@ class FitbotAdminController extends Controller
         return redirect()->route('admin.dashboard');
     }
 
-    public function dashboard(RatingService $rating): View
+    public function dashboard(Request $request, FitbotAdminDashboardService $dashboard): View
     {
-        $completed = User::query()->completedFitbotOnboarding();
-
-        $stats = [
-            'users_total' => User::query()->count(),
-            'users_completed_onboarding' => (clone $completed)->count(),
-            'users_in_onboarding' => User::query()
-                ->whereNotNull('onboarding_step')
-                ->where('onboarding_step', '!=', '')
-                ->count(),
-        ];
-
-        $rows = User::query()
-            ->orderByDesc('id')
-            ->limit(300)
-            ->get()
-            ->map(function (User $user) use ($rating) {
-                $last = $user->dailyChecks()
-                    ->where('is_completed', true)
-                    ->orderByDesc('check_date')
-                    ->first();
-
-                return [
-                    'user' => $user,
-                    'streak' => $rating->checkInStreakDays($user),
-                    'last_check' => $last?->check_date,
-                    'onboarding_done' => $user->hasCompletedOnboarding(),
-                ];
-            });
-
-        return view('admin.dashboard', compact('stats', 'rows'));
+        return view('admin.dashboard', $dashboard->build($request));
     }
 
     public function broadcast(Request $request, TelegramBotService $telegram): RedirectResponse
