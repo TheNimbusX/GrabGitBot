@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\CheckRating;
+use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\User;
 use Carbon\Carbon;
@@ -263,5 +264,127 @@ class RatingService
             ->max('check_date');
 
         return $max !== null ? (string) $max : null;
+    }
+
+    /**
+     * Расширенная сводка: 28 дней, оси, недели, последние 7 календарных дней.
+     */
+    public function formatExtendedAnalyticsMessage(User $user, ?Carbon $now = null): string
+    {
+        $now ??= Carbon::now();
+        $from28 = $now->copy()->subDays(27)->startOfDay();
+
+        /** @var Collection<int, DailyCheck> $checks28 */
+        $checks28 = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->where('check_date', '>=', $from28->toDateString())
+            ->orderBy('check_date')
+            ->get();
+
+        if ($checks28->isEmpty()) {
+            return "📈 <b>Расширенная аналитика</b>\n\n"
+                .'Пока нет завершённых чек-инов — отметь хотя бы несколько дней, и здесь появятся цифры.';
+        }
+
+        $completedDays = $checks28->count();
+        $totalPts = (int) $checks28->sum('total_score');
+        $avgIfMarked = $completedDays > 0 ? round($totalPts / $completedDays, 1) : 0.0;
+        $calendarDays = 28;
+        $pctMarked = (int) round(100 * $completedDays / $calendarDays);
+
+        $dimLabels = [
+            'diet' => 'питание',
+            'sleep' => 'сон',
+            'workout' => 'тренировки',
+            'water' => 'вода',
+        ];
+        $dimGetters = [
+            'diet' => fn (DailyCheck $c) => $c->diet_rating,
+            'sleep' => fn (DailyCheck $c) => $c->sleep_rating,
+            'workout' => fn (DailyCheck $c) => $c->workout_rating,
+            'water' => fn (DailyCheck $c) => $c->water_rating,
+        ];
+        $dimLines = [];
+        foreach ($dimLabels as $key => $label) {
+            $sum = 0;
+            $n = 0;
+            $getter = $dimGetters[$key];
+            foreach ($checks28 as $c) {
+                $r = $getter($c);
+                if ($r !== null) {
+                    $sum += $this->pointsForRating($r);
+                    $n++;
+                }
+            }
+            if ($n > 0) {
+                $avg = round($sum / $n, 2);
+                $dimLines[] = $label.' <b>'.$avg.'</b>/2';
+            }
+        }
+        $dimBlock = $dimLines !== [] ? implode(' · ', $dimLines) : '—';
+
+        $workoutCounts = [
+            'trained' => 0,
+            'rest' => 0,
+            'skipped' => 0,
+        ];
+        foreach ($checks28 as $c) {
+            $v = WorkoutCheckVariant::tryFrom((string) ($c->workout_variant ?? ''));
+            if ($v === WorkoutCheckVariant::Trained) {
+                $workoutCounts['trained']++;
+            } elseif ($v === WorkoutCheckVariant::Rest) {
+                $workoutCounts['rest']++;
+            } elseif ($v === WorkoutCheckVariant::Skipped) {
+                $workoutCounts['skipped']++;
+            }
+        }
+
+        $last7Parts = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $d = $now->copy()->subDays($i)->startOfDay();
+            $label = $d->format('d.m');
+            $has = $this->hasCompletedCheckOnDate($user, $d);
+            $sc = $has ? $this->scoreForDay($user, $d) : null;
+            $last7Parts[] = $label.':'.($sc !== null ? '<b>'.$sc.'</b>' : '—');
+        }
+        $last7Line = implode(' ', $last7Parts);
+
+        $wStart = $now->copy()->startOfWeek();
+        $wEnd = $now->copy()->endOfWeek();
+        $lwStart = $wStart->copy()->subWeek();
+        $lwEnd = $wEnd->copy()->subWeek();
+        $thisWeekPts = $this->scoreForPeriod($user, $wStart, $wEnd);
+        $lastWeekPts = $this->scoreForPeriod($user, $lwStart, $lwEnd);
+
+        $best = $checks28->sortByDesc('total_score')->first();
+        $worst = $checks28->sortBy('total_score')->first();
+        $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '—';
+        $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '—';
+
+        $lines = [
+            '📈 <b>Расширенная аналитика</b>',
+            '<i>28 дней · по завершённым чек-инам</i>',
+            '',
+            '✅ Отмечено дней: <b>'.$completedDays.'</b> из '.$calendarDays.' ('.$pctMarked.'%)',
+            '⭐ Баллов за период: <b>'.$totalPts.'</b> · в среднем на отмеченный день: <b>'.$avgIfMarked.'</b>/'.self::MAX_DAILY_POINTS,
+            '',
+            '<b>Последние 7 дней</b> (день → баллы)',
+            $last7Line,
+            '',
+            '<b>Оси за 28 дней</b> (средн. баллов за ось, макс. 2)',
+            $dimBlock,
+            '',
+            '💪 <b>Движение</b> (дней): тренировка '.$workoutCounts['trained']
+                .' · отдых '.$workoutCounts['rest']
+                .' · пропуск '.$workoutCounts['skipped'],
+            '',
+            '<b>Недели (баллы)</b>',
+            'Эта: <b>'.$thisWeekPts.'</b> · прошлая: <b>'.$lastWeekPts.'</b>',
+            '',
+            '<b>Пики за 28 дней</b>',
+            'Лучший: '.$bestStr.' · слабее всего: '.$worstStr,
+        ];
+
+        return implode("\n", $lines);
     }
 }

@@ -90,10 +90,11 @@ class FitBotService
                 '/check' => $this->cmdCheck($user, $chatId),
                 '/rating' => $this->cmdRating($user, $chatId),
                 '/plan' => $this->cmdPlan($user, $chatId),
+                '/analytics', '/stats', '/аналитика' => $this->cmdExtendedAnalytics($user, $chatId),
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    '🤔 Неизвестная команда. Доступны: /start, /check, /rating, /plan, /settings',
+                    '🤔 Неизвестная команда. Доступны: /start, /check, /rating, /plan, /analytics, /settings',
                     $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
                 ),
             };
@@ -115,6 +116,7 @@ class FitBotService
                     'rating' => $this->cmdRating($user, $chatId),
                     'plan' => $this->cmdPlan($user, $chatId),
                     'settings' => $this->cmdSettings($user, $chatId),
+                    'analytics' => $this->cmdExtendedAnalytics($user, $chatId),
                     'plan_ai' => $this->telegram->sendMessage(
                         $chatId,
                         '💎 <b>PRO / AI-тренировки</b> — позже, с оплатой. Сейчас пользуйся планом и чек-инами бесплатно.',
@@ -155,7 +157,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                '👇 Выбери действие кнопками внизу или команды: /check, /rating, /plan, /settings',
+                '👇 Выбери действие кнопками внизу или команды: /check, /rating, /plan, /analytics, /settings',
                 $this->mainMenuKeyboard()
             );
         }
@@ -195,6 +197,12 @@ class FitBotService
 
         if ($data === 'menu:plan') {
             $this->cmdPlan($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'menu:analytics') {
+            $this->cmdExtendedAnalytics($user, $chatId);
 
             return;
         }
@@ -331,6 +339,18 @@ class FitBotService
         }
 
         $text = $this->rating->formatSummaryMessage($user);
+        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
+    }
+
+    private function cmdExtendedAnalytics(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+
+            return;
+        }
+
+        $text = $this->rating->formatExtendedAnalyticsMessage($user);
         $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
     }
 
@@ -1284,6 +1304,7 @@ class FitBotService
             'Рейтинг' => 'rating',
             '📋 План', 'План' => 'plan',
             '⚙️ Настройки', 'Настройки' => 'settings',
+            '📈 Расширенная аналитика' => 'analytics',
             '👉 Персональный план (AI)' => 'plan_ai',
             default => null,
         };
