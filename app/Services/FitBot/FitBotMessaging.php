@@ -378,7 +378,7 @@ final class FitBotMessaging
     }
 
     /**
-     * @param  array{morning: bool, evening: bool, churn: bool, quiet: bool, weekly_focus: bool}  $flags
+     * @param  array{morning: bool, evening: bool, churn: bool, quiet: bool, weekly_focus: bool, weekly_weight: bool}  $flags
      */
     public static function notificationsPanelText(array $flags, string $quietStart, string $quietEnd): string
     {
@@ -389,7 +389,8 @@ final class FitBotMessaging
             .$on($flags['morning']).' Утро (мотивация по расписанию)'."\n"
             .$on($flags['evening']).' Вечер (напоминание про чек-ин)'."\n"
             .$on($flags['churn']).' Возврат после паузы'."\n"
-            .$on($flags['weekly_focus']).' Напоминание про фокус недели (раз в неделю)'."\n"
+            .$on($flags['weekly_focus']).' Фокус недели (раз в неделю)'."\n"
+            .$on($flags['weekly_weight']).' Вес: напоминание обновить (раз в неделю)'."\n"
             .$on($flags['quiet']).' Тихие часы: не беспокоить'."\n\n"
             .'Окно тишины: <b>'.e($quietStart).' - '.e($quietEnd).'</b> (локаль сервера)'."\n\n"
             .'<i>Пресеты меняют только интервал «не беспокоить».</i>';
@@ -454,6 +455,48 @@ final class FitBotMessaging
             .'Одна строка, что важно сейчас: сон, вода, питание, тренировки…'."\n"
             .'Настройки → <b>Фокус недели</b> или пресеты там же.'."\n\n"
             .'<i>Отключить напоминание: Настройки → Уведомления.</i>';
+    }
+
+    public static function weeklyWeightReminderNudge(): string
+    {
+        return '⚖️ <b>Раз в неделю: обнови вес</b>'."\n\n"
+            .'Так в <b>/analytics</b> будет нормальная динамика: с чего начинал и что сейчас.'
+            ."\n\n"
+            .'Нажми кнопку ниже и напиши вес в кг одним числом (например <b>75.5</b>).';
+    }
+
+    public static function weightUpdateAskKg(): string
+    {
+        return 'Ок. Напиши <b>текущий вес в кг</b> одним числом (например 75 или 75.5).'
+            ."\n\n"
+            .'<i>Не сейчас - просто игнорируй, запрос сгорит сам.</i>';
+    }
+
+    public static function weightUpdateInvalid(): string
+    {
+        return 'Нужно число в кг, как в анкете: обычно <b>30–300</b>. Попробуй ещё раз.';
+    }
+
+    public static function weightUpdatedSaved(float $kg): string
+    {
+        return '⚖️ Записал: <b>'.round($kg, 1).'</b> кг. Дальше смотри динамику в /analytics.';
+    }
+
+    public static function weightRecalcPlanQuestion(): string
+    {
+        return '📋 У тебя план калорий от FitBot. <b>Пересчитать</b> его под новый вес?'
+            ."\n\n"
+            .'Или оставь как есть - ккал не трогну.';
+    }
+
+    public static function weightRecalcDone(): string
+    {
+        return '📋 План пересчитан под новый вес. Смотри /plan';
+    }
+
+    public static function weightRecalcSkipped(): string
+    {
+        return 'Ок, цели по ккал не менял. Вес в профиле уже обновлён.';
     }
 
     public static function checkCannotStepBack(): string

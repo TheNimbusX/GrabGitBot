@@ -22,6 +22,7 @@ class User extends Authenticatable
         'onboarding_step',
         'plan_mode',
         'weight_kg',
+        'starting_weight_kg',
         'height_cm',
         'gender',
         'activity_level',
@@ -43,6 +44,7 @@ class User extends Authenticatable
         'quiet_hours_start',
         'quiet_hours_end',
         'notify_weekly_focus_reminder',
+        'notify_weekly_weight_reminder',
         'password',
     ];
 
@@ -53,6 +55,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'weight_kg' => 'float',
+        'starting_weight_kg' => 'float',
         'age' => 'integer',
         'height_cm' => 'integer',
         'sleep_target_hours' => 'float',
@@ -67,11 +70,17 @@ class User extends Authenticatable
         'notify_churn' => 'boolean',
         'notify_quiet_enabled' => 'boolean',
         'notify_weekly_focus_reminder' => 'boolean',
+        'notify_weekly_weight_reminder' => 'boolean',
     ];
 
     public function dailyChecks(): HasMany
     {
         return $this->hasMany(DailyCheck::class);
+    }
+
+    public function weightLogs(): HasMany
+    {
+        return $this->hasMany(UserWeightLog::class);
     }
 
     public function photos(): HasMany
@@ -139,6 +148,7 @@ class User extends Authenticatable
             'evening' => (bool) ($this->notify_evening ?? true),
             'churn' => (bool) ($this->notify_churn ?? true),
             'weekly_focus' => (bool) ($this->notify_weekly_focus_reminder ?? true),
+            'weekly_weight' => (bool) ($this->notify_weekly_weight_reminder ?? true),
             default => true,
         };
         if (! $on) {

@@ -453,6 +453,45 @@ class RatingService
             'Лучший: '.$bestStr.' · слабее всего: '.$worstStr,
         ];
 
+        $lines = array_merge($lines, $this->extendedAnalyticsWeightLines($user));
+
         return implode("\n", $lines);
+    }
+
+    /** @return list<string> */
+    private function extendedAnalyticsWeightLines(User $user): array
+    {
+        if ($user->weight_kg === null) {
+            return [];
+        }
+
+        $out = [
+            '',
+            '<b>Вес</b>',
+            'Сейчас: <b>'.round((float) $user->weight_kg, 1).'</b> кг',
+        ];
+
+        $start = $user->starting_weight_kg;
+        if ($start === null) {
+            $first = $user->weightLogs()->orderBy('created_at')->first();
+            $start = $first !== null ? (float) $first->weight_kg : null;
+        }
+
+        if ($start !== null) {
+            $delta = round((float) $user->weight_kg - (float) $start, 1);
+            $sign = $delta > 0 ? '+' : '';
+            $out[] = 'Старт (анкета): <b>'.round((float) $start, 1).'</b> кг · изменение: <b>'.$sign.$delta.'</b> кг';
+        }
+
+        $recent = $user->weightLogs()->orderByDesc('created_at')->limit(5)->get();
+        if ($recent->count() >= 2) {
+            $parts = [];
+            foreach ($recent->sortBy('created_at')->values() as $log) {
+                $parts[] = $log->created_at->format('d.m').' <b>'.round((float) $log->weight_kg, 1).'</b>';
+            }
+            $out[] = 'Замеры: '.implode(' · ', $parts);
+        }
+
+        return $out;
     }
 }

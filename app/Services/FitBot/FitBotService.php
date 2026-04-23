@@ -14,6 +14,7 @@ use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\Photo;
 use App\Models\User;
+use App\Models\UserWeightLog;
 use App\Services\PlanGeneratorService;
 use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
@@ -159,6 +160,12 @@ class FitBotService
             }
         }
 
+        if ($text !== '' && $user->hasCompletedOnboarding()) {
+            if ($this->tryConsumeWeightUpdateReply($user, $chatId, $text)) {
+                return;
+            }
+        }
+
         if (! empty($msg['photo']) && $user->onboardingStepEnum() === OnboardingStep::AskBeforePhoto) {
             $fileId = (string) $msg['photo'][array_key_last($msg['photo'])]['file_id'];
             $this->finishOnboardingWithOptionalPhoto($user, $chatId, $fileId);
@@ -228,6 +235,12 @@ class FitBotService
 
         if ($data === 'menu:analytics') {
             $this->cmdExtendedAnalytics($user, $chatId);
+
+            return;
+        }
+
+        if (str_starts_with($data, 'wt:')) {
+            $this->handleWeightUpdateCallback($user, $chatId, $data);
 
             return;
         }
@@ -753,6 +766,8 @@ class FitBotService
                 $user->notify_quiet_enabled = ! (bool) $user->notify_quiet_enabled;
             } elseif ($field === 'weekly_focus') {
                 $user->notify_weekly_focus_reminder = ! (bool) $user->notify_weekly_focus_reminder;
+            } elseif ($field === 'weekly_weight') {
+                $user->notify_weekly_weight_reminder = ! (bool) $user->notify_weekly_weight_reminder;
             }
             $user->save();
             $this->sendNotificationsSettingsPanel($user, $chatId, $editMessageId);
@@ -788,6 +803,7 @@ class FitBotService
             'evening' => (bool) $user->notify_evening,
             'churn' => (bool) $user->notify_churn,
             'weekly_focus' => (bool) $user->notify_weekly_focus_reminder,
+            'weekly_weight' => (bool) $user->notify_weekly_weight_reminder,
             'quiet' => (bool) $user->notify_quiet_enabled,
         ], (string) $user->quiet_hours_start, (string) $user->quiet_hours_end);
 
@@ -799,6 +815,7 @@ class FitBotService
             ],
             [
                 ['text' => 'Фокус (раз в нед.)', 'callback_data' => 'set:notif:toggle:weekly_focus'],
+                ['text' => 'Вес (раз в нед.)', 'callback_data' => 'set:notif:toggle:weekly_weight'],
             ],
             [
                 ['text' => 'Тихие часы вкл/выкл', 'callback_data' => 'set:notif:toggle:quiet'],
@@ -833,8 +850,11 @@ class FitBotService
             ->where('type', PhotoType::Before->value)
             ->delete();
 
+        UserWeightLog::query()->where('user_id', $user->id)->delete();
+
         $user->age = null;
         $user->weight_kg = null;
+        $user->starting_weight_kg = null;
         $user->height_cm = null;
         $user->gender = null;
         $user->activity_level = null;
@@ -1219,6 +1239,8 @@ class FitBotService
         $user->next_progress_photo_at = Carbon::now()->addDays(30);
         $user->save();
 
+        $this->recordInitialWeightSnapshot($user);
+
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
         $this->telegram->sendMessage(
             $chatId,
@@ -1335,12 +1357,140 @@ class FitBotService
         $this->plans->applyBasePlan($user);
         $user->refresh();
 
+        $this->recordInitialWeightSnapshot($user);
+
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
         $this->telegram->sendMessage(
             $chatId,
             FitBotMessaging::finishFullPlanFooter(),
             $this->mainMenuKeyboard()
         );
+    }
+
+    private function recordInitialWeightSnapshot(User $user): void
+    {
+        if ($user->weight_kg === null) {
+            return;
+        }
+        if ($user->starting_weight_kg === null) {
+            $user->starting_weight_kg = $user->weight_kg;
+        }
+        $user->save();
+        if (! UserWeightLog::query()->where('user_id', $user->id)->exists()) {
+            UserWeightLog::query()->create([
+                'user_id' => $user->id,
+                'weight_kg' => $user->weight_kg,
+            ]);
+        }
+    }
+
+    private function awaitingWeightInputCacheKey(int $telegramId): string
+    {
+        return 'fitbot:await_weight_kg:'.$telegramId;
+    }
+
+    private function tryConsumeWeightUpdateReply(User $user, int $chatId, string $text): bool
+    {
+        if (! Cache::has($this->awaitingWeightInputCacheKey((int) $user->telegram_id))) {
+            return false;
+        }
+
+        $w = $this->parseFloat($text);
+        if ($w === null || $w < 30 || $w > 300) {
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weightUpdateInvalid(),
+                $this->mainMenuKeyboard()
+            );
+
+            return true;
+        }
+
+        Cache::forget($this->awaitingWeightInputCacheKey((int) $user->telegram_id));
+        $this->applyRecordedWeightUpdate($user, $chatId, $w);
+
+        return true;
+    }
+
+    private function applyRecordedWeightUpdate(User $user, int $chatId, float $kg): void
+    {
+        UserWeightLog::query()->create([
+            'user_id' => $user->id,
+            'weight_kg' => $kg,
+        ]);
+        $user->weight_kg = $kg;
+        $user->save();
+        $user->refresh();
+
+        $this->telegram->sendMessage(
+            $chatId,
+            FitBotMessaging::weightUpdatedSaved($kg),
+            $this->mainMenuKeyboard()
+        );
+
+        if ($user->usesGeneratedNutritionPlan()) {
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weightRecalcPlanQuestion(),
+                $this->telegram->inlineKeyboard([
+                    [['text' => '📋 Пересчитать план', 'callback_data' => 'wt:recalc']],
+                    [['text' => 'Оставить как есть', 'callback_data' => 'wt:skip']],
+                ])
+            );
+        }
+    }
+
+    private function handleWeightUpdateCallback(User $user, int $chatId, string $data): void
+    {
+        if ($data === 'wt:start') {
+            if (! $user->hasCompletedOnboarding() || $user->weight_kg === null) {
+                $this->telegram->sendMessage(
+                    $chatId,
+                    FitBotMessaging::mainMenuFallback(),
+                    $this->mainMenuKeyboard()
+                );
+
+                return;
+            }
+            Cache::put($this->awaitingWeightInputCacheKey((int) $user->telegram_id), 1, now()->addMinutes(45));
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weightUpdateAskKg(),
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
+        if ($data === 'wt:recalc') {
+            if (! $user->usesGeneratedNutritionPlan()) {
+                $this->telegram->sendMessage(
+                    $chatId,
+                    FitBotMessaging::weightRecalcSkipped(),
+                    $this->mainMenuKeyboard()
+                );
+
+                return;
+            }
+            $this->plans->applyBasePlan($user);
+            $user->refresh();
+            $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weightRecalcDone(),
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
+        if ($data === 'wt:skip') {
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weightRecalcSkipped(),
+                $this->mainMenuKeyboard()
+            );
+        }
     }
 
     private function handleCheckCallback(User $user, int $chatId, string $data): void
