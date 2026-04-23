@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\StrikeStatusTier;
 use App\Models\User;
 use App\Services\FitBot\FitBotMessaging;
 use App\Services\RatingService;
@@ -57,6 +58,16 @@ class FitbotMorningMotivationCommand extends Command
                 $gym = FitBotMessaging::workoutSkippedStreakNudge($rating->consecutiveSkippedWorkoutDays($user, $now));
                 if ($gym !== null) {
                     $prefix[] = $gym;
+                }
+                if ($now->dayOfWeek === Carbon::MONDAY) {
+                    $streakMon = $rating->checkInStreakDays($user, $now);
+                    $monStatus = FitBotMessaging::strikeStatusMondayLine(
+                        $streakMon,
+                        StrikeStatusTier::fromCheckInStreak($streakMon)
+                    );
+                    if ($monStatus !== null) {
+                        $prefix[] = $monStatus;
+                    }
                 }
                 if ($prefix !== []) {
                     $text = implode("\n\n", $prefix)."\n\n".$text;

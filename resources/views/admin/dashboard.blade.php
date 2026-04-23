@@ -391,6 +391,21 @@
         }
         .copy-tg:hover { color: var(--accent); border-color: var(--accent); }
         .foot-note { font-size: .76rem; color: var(--muted); margin-top: .85rem; line-height: 1.45; }
+        .tier-cell { font-size: .8rem; line-height: 1.35; max-width: 200px; }
+        .tier-cell .e { font-size: 1.15rem; margin-right: .15rem; vertical-align: middle; }
+        .support-msg {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: .84rem;
+            line-height: 1.45;
+            max-height: 220px;
+            overflow: auto;
+            padding: .65rem;
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
         details.danger-zone summary {
             cursor: pointer;
             color: var(--danger);
@@ -473,12 +488,12 @@
             'low_activity_14d' => '≤ 1 чек-ин за 14 дней',
         ];
         $pulseLabels = [
-            'hot' => 'В теме',
-            'warm' => 'Недавно',
-            'cool' => 'Просел',
-            'cold' => 'Давно нет',
-            'new' => 'Новичок',
-            'onboarding' => 'Онбординг',
+            'hot' => 'В теме (чек-ин сегодня/вчера)',
+            'warm' => 'Недавно (2–7 дн без чек-ина)',
+            'cool' => 'Просел (8–14 дн)',
+            'cold' => 'Давно нет чек-ина (14+ дн или не было)',
+            'new' => 'Новая регистрация (≤7 дн с /start)',
+            'onboarding' => 'В онбординге',
         ];
         $engPct = $stats['engagement_completed_7d_pct'];
         $funnelMax = 1;
@@ -495,6 +510,7 @@
                 <a href="#metrics"><span class="ic">📊</span> Метрики</a>
                 <a href="#funnel"><span class="ic">🪜</span> Воронка</a>
                 <a href="#broadcast"><span class="ic">✈️</span> Рассылка</a>
+                <a href="#support"><span class="ic">✉️</span> Поддержка</a>
                 <a href="#users"><span class="ic">👥</span> Пользователи</a>
             </nav>
             <div class="sidebar-foot">
@@ -514,6 +530,7 @@
                     <option value="#metrics">Метрики</option>
                     <option value="#funnel">Воронка</option>
                     <option value="#broadcast">Рассылка</option>
+                    <option value="#support">Поддержка</option>
                     <option value="#users">Пользователи</option>
                 </select>
             </div>
@@ -593,6 +610,14 @@
                         <strong>{{ $stats['plan_mode_full'] }}</strong>
                         <div class="label">режим FitBot</div>
                         <div class="sub">Свой план: {{ $stats['plan_mode_discipline'] }} · legacy ккал: {{ $stats['plan_legacy_calories'] }}</div>
+                    </div>
+                    <div class="kpi tone-ok">
+                        <div class="ic-row"><span class="ic">✉️</span>
+                            <a href="#support" class="delta ok" style="text-decoration:none;color:inherit;">открыть ↓</a>
+                        </div>
+                        <strong>{{ $supportMessagesTotal }}</strong>
+                        <div class="label">обращений в поддержку</div>
+                        <div class="sub">Кнопка «Написать в поддержку» в боте · ниже последние записи</div>
                     </div>
                 </div>
             </section>
@@ -677,6 +702,52 @@
                 </div>
             </section>
 
+            <section class="section" id="support">
+                <div class="section-head">
+                    <h2>Поддержка из бота</h2>
+                    <span class="hint-inline">Баги и идеи · всего {{ $supportMessagesTotal }}</span>
+                </div>
+                <div class="panel">
+                    @if ($supportMessages->isEmpty())
+                        <p class="hint" style="margin:0;">Пока нет сообщений. После миграции таблицы и первых обращений они появятся здесь.</p>
+                    @else
+                        <p class="hint">С новых к старым (до 100 шт.). Пользователь удалён — строка пропадёт вместе с сообщениями (cascade).</p>
+                        <div class="scroll-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Когда</th>
+                                        <th>User</th>
+                                        <th>Telegram</th>
+                                        <th>Текст</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($supportMessages as $sm)
+                                        @php($su = $sm->user)
+                                        <tr>
+                                            <td class="no num" style="white-space:nowrap;">{{ $sm->created_at?->format('Y-m-d H:i') }}</td>
+                                            <td class="num">
+                                                @if ($su)
+                                                    #{{ $su->id }} · {{ $su->first_name ?? '—' }}
+                                                    @if ($su->username)
+                                                        <span class="no">{{ '@'.$su->username }}</span>
+                                                    @endif
+                                                @else
+                                                    <span class="no">удалён</span>
+                                                @endif
+                                            </td>
+                                            <td class="num">{{ $sm->telegram_id }}</td>
+                                            <td><pre class="support-msg">{{ $sm->body }}</pre></td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            </section>
+
             <section class="section" id="users">
                 <div class="section-head">
                     <h2>Пользователи</h2>
@@ -724,11 +795,13 @@
                         <table class="responsive">
                             <thead>
                                 <tr>
-                                    <th>Статус</th>
+                                    <th>Пульс</th>
+                                    <th>Уровень</th>
                                     <th>ID</th>
                                     <th>Telegram</th>
                                     <th>Имя</th>
                                     <th class="num">Возраст</th>
+                                    <th class="num">Вес</th>
                                     <th>План</th>
                                     <th>Онбординг</th>
                                     <th class="num">Чек-ины</th>
@@ -739,6 +812,7 @@
                                     <th class="num">Серия</th>
                                     <th>Последний чек</th>
                                     <th>Ккал / цели</th>
+                                    <th class="num">В боте</th>
                                     <th>Создан</th>
                                     <th></th>
                                 </tr>
@@ -747,12 +821,17 @@
                                 @foreach ($rows as $row)
                                     @php($u = $row['user'])
                                     @php($pulse = $row['pulse'])
+                                    @php($tier = $row['strike_tier'])
                                     <tr>
-                                        <td data-label="Статус">
+                                        <td data-label="Пульс">
                                             <span class="pulse pulse-{{ $pulse }}"><span class="pulse-dot"></span>{{ $pulseLabels[$pulse] ?? $pulse }}</span>
                                             @if ($row['onboarding_hint'])
                                                 <div class="no" style="font-size:.72rem;margin-top:.25rem;">{{ $row['onboarding_hint'] }}</div>
                                             @endif
+                                        </td>
+                                        <td data-label="Уровень" class="tier-cell">
+                                            <span class="e">{{ $tier->emoji() }}</span><b>{{ $tier->labelRu() }}</b>
+                                            <div class="no" style="font-size:.7rem;margin-top:.2rem;">серия {{ $row['streak'] }} · {{ $tier->criteriaRu() }}</div>
                                         </td>
                                         <td class="num" data-label="ID">{{ $u->id }}</td>
                                         <td class="num" data-label="Telegram">
@@ -761,6 +840,7 @@
                                         </td>
                                         <td data-label="Имя">{{ $u->first_name }} @if($u->username) <span class="no">{{ '@'.$u->username }}</span> @endif</td>
                                         <td class="num" data-label="Возраст">{{ $u->age ?? '—' }}</td>
+                                        <td class="num" data-label="Вес">{{ $u->weight_kg !== null ? number_format((float) $u->weight_kg, 1, '.', '') : '—' }}</td>
                                         <td data-label="План">
                                             @if($u->plan_mode === 'discipline')
                                                 <span class="pill pill-disc">свой план</span>
@@ -804,6 +884,7 @@
                                                 —
                                             @endif
                                         </td>
+                                        <td class="num no" data-label="Дней в боте">{{ $row['days_in_bot'] !== null ? $row['days_in_bot'] : '—' }}</td>
                                         <td class="no" data-label="Создан">{{ $u->created_at?->format('Y-m-d H:i') }}</td>
                                         <td data-label="Действия">
                                             <details class="danger-zone">
@@ -829,7 +910,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="foot-note">Колонка «7 дн» — сумма баллов за последние 7 календарных дней (не совпадает с «календарной неделей» в сводке). Фильтры совпадают с логикой сегментов рассылки там, где это возможно без тяжёлых пересчётов.</p>
+                    <p class="foot-note"><b>Пульс</b> — насколько недавно человек закрывал чек-ин и давно ли в боте (это не игровой уровень). <b>Уровень</b> — геймификация по <b>текущей серии</b> закрытых чек-инов подряд (как в боте в «Профиль»): 0–7 Новичок, 8–14 Подснежник, 15–30 Любитель, 31–60 Опытный, 61+ Босс. Колонка «7 дн» — сумма баллов за последние 7 календарных дней.</p>
                 </div>
             </section>
         </main>

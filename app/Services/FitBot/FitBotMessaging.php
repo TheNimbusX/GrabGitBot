@@ -2,6 +2,11 @@
 
 namespace App\Services\FitBot;
 
+use App\Enums\ActivityLevel;
+use App\Enums\ExperienceLevel;
+use App\Enums\FitnessGoal;
+use App\Enums\Gender;
+use App\Enums\StrikeStatusTier;
 use App\Models\DailyCheck;
 use App\Models\User;
 use App\Services\RatingService;
@@ -359,7 +364,7 @@ final class FitBotMessaging
 
     public static function unknownCommand(): string
     {
-        return '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /settings';
+        return '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /settings, /profile';
     }
 
     public static function proAiMenuHint(): string
@@ -381,7 +386,170 @@ final class FitBotMessaging
 
     public static function mainMenuFallback(): string
     {
-        return '👇 Кнопки внизу или команды: /check, /cancel, /rating, /plan, /analytics, /settings';
+        return '👇 Кнопки внизу или команды: /check, /cancel, /rating, /plan, /analytics, /settings, /profile. '
+            .'Анкета и статус — <b>👤 Профиль</b>. Баг или идея — <b>✉️ Написать в поддержку</b>.';
+    }
+
+    public static function supportIntroPrompt(): string
+    {
+        return '✉️ <b>Поддержка</b>'."\n\n"
+            .'Опиши баг или предложение одним сообщением (от 5 символов). Ответ придёт, когда подключим ответы из бота.'."\n\n"
+            .'Сейчас твоё сообщение увидит администратор в панели.'."\n\n"
+            .'<i>Отменить: напиши «отмена» или отправь /cancel</i>';
+    }
+
+    public static function supportThanksAfterSend(): string
+    {
+        return '✅ <b>Спасибо!</b> Сообщение передано. Если нужно ещё — снова нажми «Написать в поддержку».';
+    }
+
+    public static function supportCancelled(): string
+    {
+        return 'Ок, не отправляю. Если передумаешь — кнопка <b>✉️ Написать в поддержку</b>.';
+    }
+
+    public static function supportTooShort(): string
+    {
+        return 'Слишком коротко — распиши чуть подробнее (минимум 5 символов) или отмени: <i>отмена</i>.';
+    }
+
+    public static function supportPhotoNotAccepted(): string
+    {
+        return 'Пока прими только <b>текстом</b>. Опиши проблему или идею словами — или нажми «отмена».';
+    }
+
+    public static function strikeStatusLegend(): string
+    {
+        $rows = [];
+        foreach ([
+            StrikeStatusTier::Novice,
+            StrikeStatusTier::Snowdrop,
+            StrikeStatusTier::Amateur,
+            StrikeStatusTier::Experienced,
+            StrikeStatusTier::Boss,
+        ] as $t) {
+            $rows[] = $t->emoji().' <b>'.$t->labelRu().'</b> — '.$t->criteriaRu().'.';
+        }
+
+        return '🎖 <b>Статусы FitBot</b>'."\n\n"
+            .'<b>Серия</b> — сколько календарных дней <b>подряд</b> у тебя закрыт чек-ин. Пропустил день — цепочка обрывается, статус может снизиться.'."\n\n"
+            .implode("\n", $rows)
+            ."\n\n".'Чем дольше держишь дисциплину без дыр, тем выше уровень. Открой <b>👤 Профиль</b>, чтобы увидеть актуальные данные.';
+    }
+
+    public static function profilePhotoCaption(StrikeStatusTier $tier, int $streak): string
+    {
+        $w = self::pluralRuDays($streak);
+
+        return '📸 <b>Последнее фото в базе</b>'."\n"
+            .$tier->emoji().' '.$tier->labelRu().' · 🔥 <b>'.$streak.'</b> '.$w.' подряд';
+    }
+
+    public static function profileMessage(User $user, RatingService $rating, int $streak, StrikeStatusTier $tier): string
+    {
+        $lines = [
+            '━━━━━ <b>Твой профиль</b> ━━━━━',
+            '',
+            $tier->emoji().' <b>'.$tier->labelRu().'</b> · 🔥 серия <b>'.$streak.'</b> '.self::pluralRuDays($streak),
+        ];
+        $hint = self::strikeProgressHint($tier, $streak);
+        if ($hint !== '') {
+            $lines[] = '<i>'.$hint.'</i>';
+        }
+        $lines[] = '';
+        $lines[] = '📋 <b>Анкета</b>';
+        $lines = array_merge($lines, self::profileQuestionnaireLines($user));
+        $s = $rating->summary($user);
+        $lines[] = '';
+        $lines[] = '📊 <b>Баллы</b>: сегодня '.$s['day'].', неделя '.$s['week'].', месяц '.$s['month'];
+        $lines[] = '';
+        $lines[] = '<i>Нажми «Как устроены статусы» ниже, если нужна расшифровка уровней.</i>';
+
+        return implode("\n", $lines);
+    }
+
+    /** @return list<string> */
+    private static function profileQuestionnaireLines(User $user): array
+    {
+        $name = trim((string) ($user->first_name ?? ''));
+        if ($name === '') {
+            $name = '—';
+        }
+        $un = $user->username ? '@'.$user->username : '—';
+        $g = Gender::tryFrom((string) $user->gender);
+        $age = $user->age !== null ? (string) $user->age : '—';
+        $weight = $user->weight_kg !== null ? (string) $user->weight_kg.' кг' : '—';
+        $height = $user->height_cm !== null ? (string) $user->height_cm.' см' : '—';
+        $act = ActivityLevel::tryFrom((string) $user->activity_level);
+        $goal = FitnessGoal::tryFrom((string) $user->goal) ?? FitnessGoal::Maintain;
+        $exp = ExperienceLevel::tryFrom((string) $user->experience);
+        $sleep = $user->sleep_target_hours !== null ? (string) $user->sleep_target_hours.' ч' : '—';
+        $water = $user->water_goal_ml !== null ? (string) $user->water_goal_ml.' мл' : '—';
+
+        $out = [
+            'Имя: <b>'.e($name).'</b> · TG: <b>'.$un.'</b>',
+            'Пол: <b>'.e($g?->labelRu() ?? '—').'</b> · возраст: <b>'.$age.'</b>',
+            'Вес: <b>'.$weight.'</b> · рост: <b>'.$height.'</b>',
+            'Активность: <b>'.e($act?->labelRu() ?? '—').'</b>',
+            'Цель: <b>'.e($goal->labelRu()).'</b> · опыт в зале: <b>'.e($exp?->labelRu() ?? '—').'</b>',
+            'Сон (цель): <b>'.$sleep.'</b> · вода (цель): <b>'.$water.'</b>',
+        ];
+        if ($user->usesGeneratedNutritionPlan()) {
+            $kcal = $user->daily_calories_target !== null ? (string) $user->daily_calories_target : '—';
+            $out[] = 'План FitBot: <b>'.$kcal.' ккал</b> / БЖУ '
+                .(int) ($user->protein_g ?? 0).' / '.(int) ($user->fat_g ?? 0).' / '.(int) ($user->carbs_g ?? 0).' г';
+        } elseif ($user->isDisciplineOnlyMode()) {
+            $out[] = 'Режим: <b>свой план</b> (без расчёта ккал в боте)';
+        } else {
+            $out[] = 'План: <b>—</b>';
+        }
+
+        return $out;
+    }
+
+    private static function strikeProgressHint(StrikeStatusTier $tier, int $streak): string
+    {
+        $left = $tier->daysUntilNext($streak);
+        if ($left === null) {
+            return 'Ты на максимальном статусе — не теряй серию.';
+        }
+        if ($left === 0) {
+            $next = $tier->next();
+            $nl = $next !== null ? $next->labelRu() : '';
+
+            return 'Остался один закрытый день до статуса «'.$nl.'».';
+        }
+        $next = $tier->next();
+        if ($next === null) {
+            return '';
+        }
+
+        return 'До «'.$next->labelRu().'»: ещё <b>'.$left.'</b> '.self::pluralRuDays($left).' серии.';
+    }
+
+    public static function strikeStatusRankUpLine(int $streak, StrikeStatusTier $tier): ?string
+    {
+        if (! in_array($streak, [8, 15, 31, 61], true)) {
+            return null;
+        }
+
+        return '🎉 <b>Новый статус: '.$tier->emoji().' '.$tier->labelRu().'</b>'."\n"
+            .'Серия <b>'.$streak.'</b> '.self::pluralRuDays($streak).' подряд.';
+    }
+
+    public static function strikeStatusMondayLine(int $streak, StrikeStatusTier $tier): ?string
+    {
+        if ($streak < 1) {
+            return null;
+        }
+        $w = self::pluralRuDays($streak);
+        $line = '🎖 Неделя стартует: <b>'.$tier->labelRu().'</b> · серия <b>'.$streak.'</b> '.$w.'.';
+        $hint = self::strikeProgressHint($tier, $streak);
+        if ($hint !== '') {
+            $line .= "\n".'<i>'.$hint.'</i>';
+        }
+
+        return $line;
     }
 
     public static function startWelcomeBack(): string

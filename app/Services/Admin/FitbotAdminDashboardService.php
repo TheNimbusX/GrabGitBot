@@ -3,10 +3,12 @@
 namespace App\Services\Admin;
 
 use App\Enums\OnboardingStep;
+use App\Enums\StrikeStatusTier;
 use App\Models\DailyCheck;
 use App\Models\Photo;
 use App\Models\TelegramOutboundMessage;
 use App\Models\User;
+use App\Models\UserSupportMessage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -124,9 +126,12 @@ class FitbotAdminDashboardService
                 ? (int) $lastCheck->copy()->startOfDay()->diffInDays($now->copy()->startOfDay())
                 : null;
 
+            $streakDays = $this->computeStreakDays($dateStrings, $now);
+
             return [
                 'user' => $user,
-                'streak' => $this->computeStreakDays($dateStrings, $now),
+                'streak' => $streakDays,
+                'strike_tier' => StrikeStatusTier::fromCheckInStreak($streakDays),
                 'last_check' => $lastCheck,
                 'days_since_check' => $daysSinceCheck,
                 'pulse' => $this->userEngagementPulse($user, $onboardingDone, $daysSinceCheck, $now),
@@ -137,6 +142,9 @@ class FitbotAdminDashboardService
                 'lifetime_points' => (int) $lifePts,
                 'week_points' => (int) ($user->week_points ?? 0),
                 'avg_check_score' => $completedN > 0 ? round($lifePts / $completedN, 2) : null,
+                'days_in_bot' => $user->created_at !== null
+                    ? (int) $now->copy()->startOfDay()->diffInDays($user->created_at->copy()->startOfDay())
+                    : null,
             ];
         });
 
@@ -158,6 +166,18 @@ class FitbotAdminDashboardService
 
         $rows = $rows->take(self::TABLE_LIMIT)->values();
 
+        $supportTableExists = Schema::hasTable('user_support_messages');
+        $supportMessages = $supportTableExists
+            ? UserSupportMessage::query()
+                ->with(['user:id,first_name,username,telegram_id'])
+                ->latest()
+                ->limit(100)
+                ->get()
+            : collect();
+        $supportMessagesTotal = $supportTableExists
+            ? (int) UserSupportMessage::query()->count()
+            : 0;
+
         return [
             'stats' => $stats,
             'rows' => $rows,
@@ -168,6 +188,8 @@ class FitbotAdminDashboardService
             ],
             'onboardingFunnel' => $this->onboardingFunnelCounts(),
             'generatedAt' => $now->copy(),
+            'supportMessages' => $supportMessages,
+            'supportMessagesTotal' => $supportMessagesTotal,
         ];
     }
 

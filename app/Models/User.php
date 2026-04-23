@@ -88,6 +88,11 @@ class User extends Authenticatable
         return $this->hasMany(Photo::class);
     }
 
+    public function supportMessages(): HasMany
+    {
+        return $this->hasMany(UserSupportMessage::class);
+    }
+
     public function hasCompletedOnboarding(): bool
     {
         if ($this->onboarding_step !== null && $this->onboarding_step !== '') {

@@ -9,11 +9,13 @@ use App\Enums\FitnessGoal;
 use App\Enums\Gender;
 use App\Enums\OnboardingStep;
 use App\Enums\PhotoType;
+use App\Enums\StrikeStatusTier;
 use App\Enums\UserPlanMode;
 use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\Photo;
 use App\Models\User;
+use App\Models\UserSupportMessage;
 use App\Models\UserWeightLog;
 use App\Services\PlanGeneratorService;
 use App\Services\RatingService;
@@ -86,6 +88,17 @@ class FitBotService
 
         if ($isCommand) {
             $command = $this->normalizeBotCommand($text);
+            $supportKey = $this->supportPendingCacheKey($telegramId);
+            if ($command === '/cancel' && Cache::has($supportKey)) {
+                Cache::forget($supportKey);
+                $this->telegram->sendMessage(
+                    $chatId,
+                    FitBotMessaging::supportCancelled(),
+                    $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
+                );
+
+                return;
+            }
             match ($command) {
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
@@ -94,6 +107,7 @@ class FitBotService
                 '/plan' => $this->cmdPlan($user, $chatId),
                 '/analytics', '/stats', '/аналитика' => $this->cmdExtendedAnalytics($user, $chatId),
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
+                '/profile', '/профиль' => $this->cmdProfile($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
                     FitBotMessaging::unknownCommand(),
@@ -131,6 +145,10 @@ class FitBotService
         if ($text !== '') {
             $menuAction = $this->replyMenuAction($text);
             if ($menuAction !== null) {
+                $supportKey = $this->supportPendingCacheKey((int) $user->telegram_id);
+                if (Cache::has($supportKey) && $menuAction !== 'support') {
+                    Cache::forget($supportKey);
+                }
                 match ($menuAction) {
                     'check' => $this->cmdCheck($user, $chatId),
                     'rating' => $this->cmdRating($user, $chatId),
@@ -142,10 +160,16 @@ class FitBotService
                         FitBotMessaging::proAiMenuHint(),
                         $this->mainMenuKeyboard()
                     ),
+                    'support' => $this->cmdSupportStart($user, $chatId),
+                    'profile' => $this->cmdProfile($user, $chatId),
                 };
 
                 return;
             }
+        }
+
+        if ($text !== '' && $this->tryConsumeSupportReply($user, $chatId, $text)) {
+            return;
         }
 
         if ($text !== '' && $user->hasCompletedOnboarding() && $this->isUserCancelCheckPhrase($text)) {
@@ -164,6 +188,18 @@ class FitBotService
             if ($this->tryConsumeWeightUpdateReply($user, $chatId, $text)) {
                 return;
             }
+        }
+
+        if (! empty($msg['photo']) && Cache::has($this->supportPendingCacheKey($telegramId))) {
+            if ($user->hasCompletedOnboarding()) {
+                $this->telegram->sendMessage(
+                    $chatId,
+                    FitBotMessaging::supportPhotoNotAccepted(),
+                    $this->mainMenuKeyboard()
+                );
+            }
+
+            return;
         }
 
         if (! empty($msg['photo']) && $user->onboardingStepEnum() === OnboardingStep::AskBeforePhoto) {
@@ -273,10 +309,27 @@ class FitBotService
 
             return;
         }
+
+        if ($data === 'profile:status_help') {
+            if (! $user->hasCompletedOnboarding()) {
+                $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+                return;
+            }
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::strikeStatusLegend(),
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
     }
 
     private function cmdStart(User $user, int $chatId): void
     {
+        Cache::forget($this->supportPendingCacheKey((int) $user->telegram_id));
+
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
@@ -556,6 +609,7 @@ class FitBotService
     {
         if ($data === 'set:home') {
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            Cache::forget($this->supportPendingCacheKey((int) $user->telegram_id));
             $this->telegram->sendMessage(
                 $chatId,
                 FitBotMessaging::settingsHomeHint(),
@@ -1624,6 +1678,11 @@ class FitBotService
             if ($carry !== null) {
                 $blocks[] = $carry;
             }
+            $tier = StrikeStatusTier::fromCheckInStreak($streak);
+            $rankUp = FitBotMessaging::strikeStatusRankUpLine($streak, $tier);
+            if ($rankUp !== null) {
+                $blocks[] = $rankUp;
+            }
             $skipRun = $this->rating->consecutiveSkippedWorkoutDays($user);
             $gymNudge = FitBotMessaging::workoutSkippedStreakNudge($skipRun);
             if ($gymNudge !== null) {
@@ -2099,7 +2158,103 @@ class FitBotService
             '⚙️ Настройки', 'Настройки' => 'settings',
             '📈 Расширенная аналитика' => 'analytics',
             '👉 Персональный план (AI)' => 'plan_ai',
+            '✉️ Написать в поддержку' => 'support',
+            '👤 Профиль' => 'profile',
             default => null,
         };
+    }
+
+    private function supportPendingCacheKey(int $telegramId): string
+    {
+        return 'fitbot:support_pending:'.$telegramId;
+    }
+
+    private function cmdProfile(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+            return;
+        }
+
+        $streak = $this->rating->checkInStreakDays($user);
+        $tier = StrikeStatusTier::fromCheckInStreak($streak);
+        $fileId = $this->resolveLatestProfilePhotoFileId($user);
+        if ($fileId !== null) {
+            $cap = FitBotMessaging::profilePhotoCaption($tier, $streak);
+            $this->telegram->sendPhoto($chatId, $fileId, $cap, null, 'HTML');
+        }
+
+        $text = FitBotMessaging::profileMessage($user, $this->rating, $streak, $tier);
+        $kb = $this->telegram->inlineKeyboard([
+            [['text' => 'ℹ️ Как устроены статусы', 'callback_data' => 'profile:status_help']],
+        ]);
+        $this->telegram->sendMessage($chatId, $text, $kb);
+    }
+
+    private function resolveLatestProfilePhotoFileId(User $user): ?string
+    {
+        $latest = Photo::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('id')
+            ->value('file_id');
+        if (is_string($latest) && $latest !== '') {
+            return $latest;
+        }
+        $before = $user->before_photo_file_id;
+
+        return is_string($before) && $before !== '' ? $before : null;
+    }
+
+    private function cmdSupportStart(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+            return;
+        }
+
+        Cache::put($this->supportPendingCacheKey((int) $user->telegram_id), 1, now()->addMinutes(30));
+        $this->telegram->sendMessage($chatId, FitBotMessaging::supportIntroPrompt(), $this->mainMenuKeyboard());
+    }
+
+    /** @return bool true если режим поддержки обработан (в т.ч. отмена). */
+    private function tryConsumeSupportReply(User $user, int $chatId, string $text): bool
+    {
+        $key = $this->supportPendingCacheKey((int) $user->telegram_id);
+        if (! Cache::has($key)) {
+            return false;
+        }
+
+        if (! $user->hasCompletedOnboarding()) {
+            Cache::forget($key);
+
+            return true;
+        }
+
+        if ($this->isUserCancelCheckPhrase($text)) {
+            Cache::forget($key);
+            $this->telegram->sendMessage($chatId, FitBotMessaging::supportCancelled(), $this->mainMenuKeyboard());
+
+            return true;
+        }
+
+        $body = trim($text);
+        if (mb_strlen($body) < 5) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::supportTooShort(), $this->mainMenuKeyboard());
+
+            return true;
+        }
+
+        $body = Str::limit($body, 4000, '…');
+        UserSupportMessage::query()->create([
+            'user_id' => $user->id,
+            'telegram_id' => $user->telegram_id,
+            'body' => $body,
+        ]);
+        Cache::forget($key);
+        $this->telegram->sendMessage($chatId, FitBotMessaging::supportThanksAfterSend(), $this->mainMenuKeyboard());
+
+        return true;
     }
 }

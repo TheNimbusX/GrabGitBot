@@ -135,6 +135,37 @@ class TelegramBotService
         }
     }
 
+    public function sendPhoto(
+        int $chatId,
+        string $photoFileId,
+        ?string $caption = null,
+        ?array $replyMarkup = null,
+        ?string $parseMode = 'HTML',
+    ): void {
+        $payload = [
+            'chat_id' => $chatId,
+            'photo' => $photoFileId,
+        ];
+        if ($caption !== null && $caption !== '') {
+            $payload['caption'] = $caption;
+        }
+        if ($replyMarkup !== null) {
+            $payload['reply_markup'] = $replyMarkup;
+        }
+        if ($parseMode !== null && ($caption !== null && $caption !== '')) {
+            $payload['parse_mode'] = $parseMode;
+        }
+
+        $json = $this->postJson('sendPhoto', $payload);
+        if (! is_array($json) || ! ($json['ok'] ?? false)) {
+            return;
+        }
+        $result = $json['result'] ?? null;
+        if (is_array($result) && isset($result['message_id'])) {
+            $this->recordOutboundChatMessageIfKnownUser($chatId, (int) $result['message_id']);
+        }
+    }
+
     /** @return int|null message_id при успехе */
     public function sendMessageReturnId(int $chatId, string $text, ?array $replyMarkup = null, ?string $parseMode = 'HTML'): ?int
     {
@@ -319,6 +350,10 @@ class TelegramBotService
             [
                 ['text' => '⚙️ Настройки'],
                 ['text' => '📈 Расширенная аналитика'],
+            ],
+            [
+                ['text' => '👤 Профиль'],
+                ['text' => '✉️ Написать в поддержку'],
             ],
             [
                 ['text' => '👉 Персональный план (AI)'],
