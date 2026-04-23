@@ -3,475 +3,703 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>FitBot — админка</title>
+    <title>FitBot — Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg0: #0a0e14;
-            --bg1: #0f1623;
-            --surface: #141c2b;
-            --surface2: #1c2739;
-            --surface3: #243047;
-            --text: #e8edf5;
-            --muted: #8b9cb3;
-            --accent: #4d9fff;
-            --accent-dim: rgba(77, 159, 255, .15);
-            --ok: #3ecf8e;
-            --ok-dim: rgba(62, 207, 142, .12);
-            --warn: #f0b429;
-            --warn-dim: rgba(240, 180, 41, .12);
-            --danger: #f07178;
-            --danger-dim: rgba(240, 113, 120, .12);
-            --violet: #c792ea;
-            --border: rgba(255, 255, 255, .07);
-            --shadow: 0 8px 32px rgba(0, 0, 0, .35);
-            --radius: 12px;
-            --radius-sm: 8px;
-            --font: "Segoe UI", "Inter", system-ui, sans-serif;
-            --nav-w: 220px;
+            --void: #050608;
+            --ink: #0c0e12;
+            --elev-1: rgba(18, 22, 30, .72);
+            --elev-2: rgba(24, 30, 42, .85);
+            --glass: rgba(255, 255, 255, .04);
+            --glass-border: rgba(255, 255, 255, .09);
+            --text: #f2f5fa;
+            --text-dim: #8b93a8;
+            --cyan: #22d3ee;
+            --cyan-dim: rgba(34, 211, 238, .14);
+            --mint: #34d399;
+            --mint-dim: rgba(52, 211, 153, .12);
+            --amber: #fbbf24;
+            --amber-dim: rgba(251, 191, 36, .12);
+            --rose: #fb7185;
+            --rose-dim: rgba(251, 113, 133, .12);
+            --violet: #a78bfa;
+            --violet-dim: rgba(167, 139, 250, .12);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --font: "Outfit", system-ui, -apple-system, sans-serif;
+            --mono: "IBM Plex Mono", ui-monospace, monospace;
+            --nav-w: 248px;
+            --glow-cyan: 0 0 80px rgba(34, 211, 238, .12);
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, .45), 0 0 0 1px var(--glass-border);
         }
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
         body {
-            font-family: var(--font);
             margin: 0;
             min-height: 100vh;
-            background: var(--bg0);
-            background-image:
-                radial-gradient(ellipse 120% 80% at 10% -20%, rgba(77, 159, 255, .18), transparent 50%),
-                radial-gradient(ellipse 80% 60% at 100% 0%, rgba(199, 146, 234, .12), transparent 45%),
-                radial-gradient(ellipse 60% 40% at 50% 100%, rgba(62, 207, 142, .06), transparent 50%);
+            font-family: var(--font);
             color: var(--text);
             line-height: 1.5;
+            background: var(--void);
+            position: relative;
+        }
+        .app-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse 100% 70% at 15% -10%, rgba(34, 211, 238, .16), transparent 45%),
+                radial-gradient(ellipse 80% 50% at 95% 10%, rgba(167, 139, 250, .12), transparent 42%),
+                radial-gradient(ellipse 60% 40% at 50% 100%, rgba(52, 211, 153, .08), transparent 50%),
+                linear-gradient(180deg, var(--ink) 0%, var(--void) 100%);
+            pointer-events: none;
+        }
+        .app-bg::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, .018) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, .018) 1px, transparent 1px);
+            background-size: 56px 56px;
+            mask-image: radial-gradient(ellipse 85% 70% at 50% 0%, black 20%, transparent 75%);
         }
         .layout {
+            position: relative;
+            z-index: 1;
             display: flex;
-            max-width: 1680px;
+            max-width: 1760px;
             margin: 0 auto;
             min-height: 100vh;
         }
         .sidebar {
             width: var(--nav-w);
             flex-shrink: 0;
-            padding: 1.25rem 1rem 2rem 1.25rem;
+            padding: 1.5rem 1rem 1.5rem 1.35rem;
             position: sticky;
             top: 0;
             align-self: flex-start;
             height: 100vh;
-            border-right: 1px solid var(--border);
-            background: rgba(10, 14, 20, .65);
-            backdrop-filter: blur(12px);
             display: flex;
             flex-direction: column;
+            border-right: 1px solid var(--glass-border);
+            background: linear-gradient(165deg, rgba(12, 14, 18, .94) 0%, rgba(8, 10, 14, .88) 100%);
+            backdrop-filter: blur(20px);
         }
-        .brand {
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-            color: var(--accent);
-            margin-bottom: .25rem;
+        .brand-lockup {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            margin-bottom: 1.75rem;
         }
-        .sidebar h1 {
+        .brand-mark {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--cyan), #0891b2);
+            display: grid;
+            place-items: center;
             font-size: 1.15rem;
-            font-weight: 700;
-            margin: 0 0 1.25rem;
-            letter-spacing: -.02em;
+            font-weight: 800;
+            color: var(--void);
+            box-shadow: 0 4px 20px rgba(34, 211, 238, .35);
+        }
+        .brand-text .brand {
+            font-size: .65rem;
+            font-weight: 800;
+            letter-spacing: .2em;
+            text-transform: uppercase;
+            color: var(--cyan);
+            margin: 0;
+        }
+        .brand-text h1 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            margin: .15rem 0 0;
+            letter-spacing: -.03em;
+            line-height: 1.15;
         }
         .nav {
             display: flex;
             flex-direction: column;
-            gap: .2rem;
+            gap: .25rem;
         }
         .nav a {
             display: flex;
             align-items: center;
-            gap: .5rem;
-            padding: .5rem .65rem;
+            gap: .65rem;
+            padding: .62rem .85rem;
             border-radius: var(--radius-sm);
-            color: var(--muted);
+            color: var(--text-dim);
             text-decoration: none;
             font-size: .88rem;
-            font-weight: 500;
-            transition: background .15s, color .15s;
+            font-weight: 600;
+            transition: color .15s, background .2s, transform .15s;
+            border: 1px solid transparent;
         }
-        .nav a:hover { background: var(--surface2); color: var(--text); }
-        .nav a .ic { font-size: 1rem; opacity: .85; width: 1.25rem; text-align: center; }
+        .nav a:hover {
+            color: var(--text);
+            background: var(--glass);
+            border-color: var(--glass-border);
+        }
+        .nav a .ic {
+            font-size: 1.05rem;
+            width: 1.35rem;
+            text-align: center;
+            opacity: .95;
+        }
         .sidebar-foot {
             margin-top: auto;
-            padding-top: 2rem;
+            padding-top: 1.5rem;
         }
         .sidebar-foot .meta {
-            font-size: .72rem;
-            color: var(--muted);
-            margin-bottom: .65rem;
-            line-height: 1.35;
+            font-family: var(--mono);
+            font-size: .68rem;
+            color: var(--text-dim);
+            margin-bottom: .75rem;
+            line-height: 1.45;
+            padding: .65rem .75rem;
+            background: var(--glass);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--glass-border);
         }
         .btn-ghost {
             width: 100%;
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            border: 1px solid var(--glass-border);
             border-radius: var(--radius-sm);
-            padding: .5rem .75rem;
+            padding: .55rem .85rem;
             font: inherit;
             font-weight: 600;
             cursor: pointer;
+            transition: color .15s, border-color .15s, background .15s;
         }
-        .btn-ghost:hover { background: var(--surface3); }
-        main {
+        .btn-ghost:hover {
+            color: var(--text);
+            border-color: rgba(34, 211, 238, .35);
+            background: var(--cyan-dim);
+        }
+        .main-area {
             flex: 1;
-            padding: 1.25rem 1.5rem 3rem;
             min-width: 0;
+            padding: 1.35rem 1.75rem 3.5rem;
+        }
+        .topbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.75rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .topbar-kicker {
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--cyan);
+            margin: 0 0 .35rem;
+        }
+        .topbar-title {
+            font-size: clamp(1.65rem, 3.5vw, 2.15rem);
+            font-weight: 800;
+            letter-spacing: -.04em;
+            margin: 0;
+            line-height: 1.1;
+            background: linear-gradient(120deg, #fff 30%, rgba(34, 211, 238, .85));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .topbar-meta {
+            display: flex;
+            align-items: center;
+            gap: .85rem;
+            flex-wrap: wrap;
+        }
+        .pill-live {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-family: var(--mono);
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--mint);
+            padding: .35rem .65rem;
+            background: var(--mint-dim);
+            border-radius: 999px;
+            border: 1px solid rgba(52, 211, 153, .25);
+        }
+        .pill-live .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--mint);
+            box-shadow: 0 0 10px var(--mint);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .6; transform: scale(.85); }
+        }
+        #admin-clock {
+            font-family: var(--mono);
+            font-size: .8rem;
+            color: var(--text-dim);
         }
         .section {
-            margin-bottom: 1.75rem;
+            margin-bottom: 2.25rem;
         }
         .section-head {
             display: flex;
-            align-items: baseline;
+            align-items: flex-end;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: .5rem;
-            margin-bottom: 1rem;
+            gap: .65rem;
+            margin-bottom: 1.1rem;
         }
         .section-head h2 {
+            display: flex;
+            align-items: center;
+            gap: .65rem;
             font-size: 1.05rem;
-            font-weight: 650;
+            font-weight: 700;
             margin: 0;
+            letter-spacing: -.02em;
         }
-        .section-head .hint-inline {
+        .section-idx {
+            font-family: var(--mono);
+            font-size: .65rem;
+            font-weight: 600;
+            color: var(--void);
+            background: linear-gradient(135deg, var(--cyan), #06b6d4);
+            padding: .2rem .45rem;
+            border-radius: 6px;
+        }
+        .hint-inline {
             font-size: .8rem;
-            color: var(--muted);
+            color: var(--text-dim);
+            max-width: 420px;
+            text-align: right;
         }
-        .kpi-grid {
+        .hero-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: .85rem;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
         }
-        .kpi {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 1rem 1.1rem;
-            box-shadow: var(--shadow);
+        @media (max-width: 1100px) {
+            .hero-grid { grid-template-columns: 1fr; }
+        }
+        .hero-card {
             position: relative;
+            padding: 1.35rem 1.4rem;
+            border-radius: var(--radius);
+            background: var(--elev-1);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-card);
             overflow: hidden;
         }
-        .kpi::before {
+        .hero-card::before {
             content: "";
             position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent), var(--violet));
-            opacity: .7;
+            top: 0; right: 0;
+            width: 140px;
+            height: 140px;
+            background: radial-gradient(circle, var(--card-glow, rgba(34, 211, 238, .15)) 0%, transparent 70%);
+            pointer-events: none;
         }
-        .kpi.tone-ok::before { background: linear-gradient(90deg, var(--ok), #5fd4a8); }
-        .kpi.tone-warn::before { background: linear-gradient(90deg, var(--warn), #ffcc66); }
-        .kpi.tone-danger::before { background: linear-gradient(90deg, var(--danger), #ff9a9e); }
-        .kpi .ic-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: .35rem;
-        }
-        .kpi .ic {
-            font-size: 1.35rem;
-            line-height: 1;
-            opacity: .9;
-        }
-        .kpi .delta {
-            font-size: .72rem;
+        .hero-card.cyan { --card-glow: rgba(34, 211, 238, .22); }
+        .hero-card.mint { --card-glow: rgba(52, 211, 153, .2); }
+        .hero-card.violet { --card-glow: rgba(167, 139, 250, .18); }
+        .hero-label {
+            font-size: .78rem;
             font-weight: 600;
-            padding: .2rem .45rem;
-            border-radius: 999px;
-            background: var(--accent-dim);
-            color: var(--accent);
+            color: var(--text-dim);
+            margin-bottom: .5rem;
         }
-        .kpi .delta.warn { background: var(--warn-dim); color: var(--warn); }
-        .kpi .delta.danger { background: var(--danger-dim); color: var(--danger); }
-        .kpi .delta.ok { background: var(--ok-dim); color: var(--ok); }
-        .kpi strong {
+        .hero-value {
+            font-family: var(--mono);
+            font-size: 2.35rem;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: -.03em;
+        }
+        .hero-sub {
+            margin-top: .75rem;
+            font-size: .78rem;
+            color: var(--text-dim);
+            line-height: 1.45;
+        }
+        .hero-badge {
+            display: inline-block;
+            margin-top: .65rem;
+            font-size: .7rem;
+            font-weight: 700;
+            padding: .2rem .5rem;
+            border-radius: 6px;
+            background: var(--mint-dim);
+            color: var(--mint);
+        }
+        .bento {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: .85rem;
+        }
+        @media (max-width: 1200px) {
+            .bento { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 560px) {
+            .bento { grid-template-columns: 1fr; }
+        }
+        .mini-kpi {
+            padding: 1rem 1.1rem;
+            border-radius: var(--radius-sm);
+            background: var(--elev-2);
+            border: 1px solid var(--glass-border);
+            transition: transform .15s, border-color .15s;
+        }
+        .mini-kpi:hover {
+            transform: translateY(-2px);
+            border-color: rgba(34, 211, 238, .2);
+        }
+        .mini-kpi .mk-ic { font-size: 1.1rem; margin-bottom: .35rem; }
+        .mini-kpi strong {
+            font-family: var(--mono);
+            font-size: 1.45rem;
+            font-weight: 600;
             display: block;
-            font-size: 1.75rem;
-            font-weight: 750;
-            line-height: 1.1;
-            font-variant-numeric: tabular-nums;
         }
-        .kpi .label { font-size: .82rem; color: var(--muted); margin-top: .2rem; }
-        .kpi .sub {
-            font-size: .76rem;
-            color: var(--muted);
-            margin-top: .5rem;
-            line-height: 1.35;
-        }
+        .mini-kpi .mk-label { font-size: .75rem; color: var(--text-dim); margin-top: .15rem; }
+        .mini-kpi .mk-sub { font-size: .68rem; color: var(--text-dim); margin-top: .45rem; line-height: 1.35; opacity: .9; }
+        .mini-kpi.warn { border-left: 3px solid var(--amber); }
+        .mini-kpi.danger { border-left: 3px solid var(--rose); }
         .panel {
-            background: var(--surface);
-            border: 1px solid var(--border);
             border-radius: var(--radius);
-            padding: 1.15rem 1.25rem;
-            box-shadow: var(--shadow);
+            background: var(--elev-1);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-card);
+            padding: 1.35rem 1.5rem;
         }
-        .panel.highlight {
-            border-color: rgba(77, 159, 255, .25);
-            background: linear-gradient(165deg, rgba(77, 159, 255, .06), var(--surface) 40%);
+        .panel-glow {
+            box-shadow: var(--shadow-card), var(--glow-cyan);
+            border-color: rgba(34, 211, 238, .2);
         }
-        .hint { font-size: .82rem; color: var(--muted); margin: 0 0 .85rem; line-height: 1.45; }
+        .hint { font-size: .84rem; color: var(--text-dim); margin: 0 0 1rem; line-height: 1.55; }
         .flash {
-            padding: .85rem 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: .65rem;
+            padding: 1rem 1.15rem;
             border-radius: var(--radius-sm);
             margin-bottom: 1rem;
             font-size: .88rem;
             border: 1px solid transparent;
         }
-        .flash-ok { background: var(--ok-dim); border-color: rgba(62, 207, 142, .35); }
-        .flash-info { background: var(--accent-dim); border-color: rgba(77, 159, 255, .35); }
-        .flash-err { background: var(--danger-dim); border-color: rgba(240, 113, 120, .4); }
-        .funnel-bars { display: flex; flex-direction: column; gap: .55rem; }
+        .flash::before { font-size: 1.1rem; line-height: 1; }
+        .flash-ok { background: var(--mint-dim); border-color: rgba(52, 211, 153, .3); }
+        .flash-ok::before { content: "✓"; color: var(--mint); }
+        .flash-info { background: var(--cyan-dim); border-color: rgba(34, 211, 238, .28); }
+        .flash-info::before { content: "ⓘ"; color: var(--cyan); }
+        .flash-err { background: var(--rose-dim); border-color: rgba(251, 113, 133, .35); }
+        .flash-err::before { content: "!"; color: var(--rose); font-weight: 800; }
+        .funnel-bars { display: flex; flex-direction: column; gap: .65rem; }
         .funnel-row {
             display: grid;
-            grid-template-columns: minmax(140px, 1fr) 2.5fr auto;
-            gap: .65rem;
+            grid-template-columns: minmax(150px, 1.1fr) 2fr auto;
+            gap: 1rem;
             align-items: center;
-            font-size: .82rem;
+            padding: .55rem .65rem;
+            border-radius: var(--radius-sm);
+            background: rgba(0, 0, 0, .2);
+            border: 1px solid var(--glass-border);
+            font-size: .84rem;
         }
         @media (max-width: 640px) {
-            .funnel-row { grid-template-columns: 1fr; }
+            .funnel-row { grid-template-columns: 1fr; gap: .5rem; }
         }
-        .funnel-row .name { color: var(--text); }
+        .funnel-row .name { font-weight: 600; }
         .funnel-row .bar-wrap {
-            height: 8px;
-            background: var(--surface3);
+            height: 10px;
+            background: rgba(255, 255, 255, .06);
             border-radius: 999px;
             overflow: hidden;
         }
         .funnel-row .bar {
             height: 100%;
             border-radius: 999px;
-            background: linear-gradient(90deg, var(--accent), var(--violet));
-            min-width: 4px;
+            background: linear-gradient(90deg, var(--cyan), var(--violet));
+            box-shadow: 0 0 12px rgba(34, 211, 238, .35);
+            min-width: 6px;
         }
-        .funnel-row .cnt { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+        .funnel-row .cnt {
+            font-family: var(--mono);
+            font-weight: 600;
+            color: var(--cyan);
+        }
         .toolbar {
             display: flex;
             flex-wrap: wrap;
-            gap: .75rem;
+            gap: .85rem;
             align-items: flex-end;
             margin-bottom: 1rem;
         }
         .toolbar .field label {
-            font-size: .74rem;
-            color: var(--muted);
+            font-size: .72rem;
+            font-weight: 600;
+            color: var(--text-dim);
             display: block;
-            margin-bottom: .25rem;
-            font-weight: 500;
+            margin-bottom: .3rem;
+            text-transform: uppercase;
+            letter-spacing: .06em;
         }
         .toolbar input[type="text"], .toolbar select, .toolbar textarea {
-            background: var(--surface2);
-            border: 1px solid var(--border);
+            background: rgba(0, 0, 0, .35);
+            border: 1px solid var(--glass-border);
             color: var(--text);
             border-radius: var(--radius-sm);
-            padding: .5rem .7rem;
+            padding: .55rem .75rem;
             font: inherit;
             min-width: 200px;
         }
-        .toolbar textarea { min-width: 100%; width: 100%; }
+        .toolbar input:focus, .toolbar select:focus, .toolbar textarea:focus {
+            outline: none;
+            border-color: rgba(34, 211, 238, .45);
+            box-shadow: 0 0 0 3px var(--cyan-dim);
+        }
         .btn {
-            background: linear-gradient(180deg, #5aa8ff, var(--accent));
-            color: #fff;
+            background: linear-gradient(135deg, #22d3ee, #06b6d4);
+            color: var(--void);
             border: 0;
             border-radius: var(--radius-sm);
-            padding: .55rem 1.1rem;
+            padding: .58rem 1.2rem;
             font: inherit;
-            font-weight: 650;
+            font-weight: 700;
             cursor: pointer;
-            box-shadow: 0 2px 12px rgba(77, 159, 255, .25);
+            box-shadow: 0 4px 20px rgba(34, 211, 238, .3);
+            transition: filter .15s, transform .1s;
         }
-        .btn:hover { filter: brightness(1.06); }
+        .btn:hover { filter: brightness(1.08); }
+        .btn:active { transform: scale(.98); }
         .btn-secondary {
-            background: var(--surface2);
+            background: rgba(255, 255, 255, .06);
             color: var(--text);
-            border: 1px solid var(--border);
+            border: 1px solid var(--glass-border);
             box-shadow: none;
         }
+        .btn-secondary:hover { background: rgba(255, 255, 255, .1); filter: none; }
         .btn-danger {
-            background: linear-gradient(180deg, #ff8a90, var(--danger));
-            box-shadow: 0 2px 12px rgba(240, 113, 120, .2);
+            background: linear-gradient(135deg, #fb7185, #e11d48);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(251, 113, 133, .25);
         }
         form.inline { display: inline; }
-        textarea.msg { width: 100%; min-height: 120px; resize: vertical; }
+        textarea.msg {
+            width: 100%;
+            min-height: 140px;
+            resize: vertical;
+            font-family: var(--mono);
+            font-size: .82rem;
+        }
         .preview-box {
-            background: var(--surface2);
-            border: 1px solid var(--border);
+            background: rgba(0, 0, 0, .35);
+            border: 1px solid rgba(34, 211, 238, .25);
             border-radius: var(--radius-sm);
-            padding: .85rem 1rem;
-            margin-top: .65rem;
+            padding: 1rem 1.15rem;
+            margin-top: .75rem;
         }
         .preview-box pre {
             white-space: pre-wrap;
-            margin: .5rem 0 0;
-            font-size: .84rem;
+            margin: .65rem 0 0;
+            font-family: var(--mono);
+            font-size: .82rem;
             color: var(--text);
         }
         .scroll-table {
             overflow-x: auto;
             border-radius: var(--radius);
-            border: 1px solid var(--border);
-            background: var(--surface);
-            box-shadow: var(--shadow);
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, .25);
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: .8rem;
+        table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+        th, td {
+            padding: .65rem .75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--glass-border);
+            vertical-align: middle;
         }
-        th, td { padding: .6rem .7rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
         thead th {
-            background: var(--surface2);
-            font-weight: 650;
-            font-size: .72rem;
+            background: rgba(34, 211, 238, .06);
+            font-weight: 700;
+            font-size: .65rem;
             text-transform: uppercase;
-            letter-spacing: .05em;
-            color: var(--muted);
+            letter-spacing: .08em;
+            color: var(--text-dim);
             position: sticky;
             top: 0;
             z-index: 2;
-            box-shadow: 0 1px 0 var(--border);
         }
-        tbody tr:hover td { background: rgba(77, 159, 255, .05); }
+        tbody tr {
+            transition: background .12s;
+        }
+        tbody tr:hover { background: rgba(34, 211, 238, .04); }
         tbody tr:last-child td { border-bottom: 0; }
-        th a { color: var(--accent); text-decoration: none; }
-        th a:hover { text-decoration: underline; }
-        .num { font-variant-numeric: tabular-nums; }
-        .ok { color: var(--ok); }
-        .no { color: var(--muted); }
+        .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+        .ok { color: var(--mint); }
+        .no { color: var(--text-dim); }
         .pulse {
             display: inline-flex;
             align-items: center;
             gap: .35rem;
-            font-size: .72rem;
-            font-weight: 650;
-            padding: .2rem .5rem;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: .22rem .55rem;
             border-radius: 999px;
             white-space: nowrap;
+            border: 1px solid transparent;
         }
         .pulse-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .pulse-hot { background: var(--ok-dim); color: var(--ok); }
-        .pulse-hot .pulse-dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-        .pulse-warm { background: rgba(77, 159, 255, .15); color: var(--accent); }
-        .pulse-warm .pulse-dot { background: var(--accent); }
-        .pulse-cool { background: var(--warn-dim); color: var(--warn); }
-        .pulse-cool .pulse-dot { background: var(--warn); }
-        .pulse-cold { background: var(--surface3); color: var(--muted); }
-        .pulse-cold .pulse-dot { background: var(--muted); }
-        .pulse-new { background: rgba(199, 146, 234, .18); color: var(--violet); }
+        .pulse-hot { background: var(--mint-dim); color: var(--mint); border-color: rgba(52, 211, 153, .25); }
+        .pulse-hot .pulse-dot { background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+        .pulse-warm { background: var(--cyan-dim); color: var(--cyan); border-color: rgba(34, 211, 238, .25); }
+        .pulse-warm .pulse-dot { background: var(--cyan); }
+        .pulse-cool { background: var(--amber-dim); color: var(--amber); border-color: rgba(251, 191, 36, .25); }
+        .pulse-cool .pulse-dot { background: var(--amber); }
+        .pulse-cold { background: rgba(255, 255, 255, .05); color: var(--text-dim); border-color: var(--glass-border); }
+        .pulse-cold .pulse-dot { background: var(--text-dim); }
+        .pulse-new { background: var(--violet-dim); color: var(--violet); border-color: rgba(167, 139, 250, .28); }
         .pulse-new .pulse-dot { background: var(--violet); }
-        .pulse-onboarding { background: var(--accent-dim); color: #9dc6ff; }
-        .pulse-onboarding .pulse-dot { background: var(--accent); }
+        .pulse-onboarding { background: rgba(34, 211, 238, .1); color: #7dd3fc; border-color: rgba(34, 211, 238, .2); }
+        .pulse-onboarding .pulse-dot { background: var(--cyan); }
         .pill {
             display: inline-block;
-            font-size: .72rem;
-            font-weight: 600;
-            padding: .15rem .45rem;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: .18rem .5rem;
             border-radius: 6px;
-            background: var(--surface3);
-            color: var(--muted);
+            background: rgba(255, 255, 255, .08);
+            color: var(--text-dim);
         }
-        .pill-full { background: rgba(62, 207, 142, .15); color: var(--ok); }
-        .pill-disc { background: rgba(240, 180, 41, .15); color: var(--warn); }
+        .pill-full { background: var(--mint-dim); color: var(--mint); }
+        .pill-disc { background: var(--amber-dim); color: var(--amber); }
         .copy-tg {
-            font: inherit;
-            font-size: .72rem;
-            padding: .15rem .4rem;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            background: var(--surface2);
-            color: var(--muted);
+            font-family: var(--mono);
+            font-size: .65rem;
+            padding: .2rem .45rem;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, .35);
+            color: var(--text-dim);
             cursor: pointer;
-            margin-left: .25rem;
+            margin-left: .3rem;
+            transition: color .15s, border-color .15s;
         }
-        .copy-tg:hover { color: var(--accent); border-color: var(--accent); }
-        .foot-note { font-size: .76rem; color: var(--muted); margin-top: .85rem; line-height: 1.45; }
-        .tier-cell { font-size: .8rem; line-height: 1.35; max-width: 200px; }
-        .tier-cell .e { font-size: 1.15rem; margin-right: .15rem; vertical-align: middle; }
+        .copy-tg:hover { color: var(--cyan); border-color: rgba(34, 211, 238, .4); }
+        .foot-note {
+            font-size: .74rem;
+            color: var(--text-dim);
+            margin-top: 1rem;
+            line-height: 1.55;
+            padding: 1rem 1.1rem;
+            background: rgba(0, 0, 0, .2);
+            border-radius: var(--radius-sm);
+            border: 1px dashed var(--glass-border);
+        }
+        .tier-cell { font-size: .78rem; line-height: 1.35; max-width: 210px; }
+        .tier-cell .e { font-size: 1.1rem; margin-right: .2rem; }
         .support-msg {
             margin: 0;
             white-space: pre-wrap;
             word-break: break-word;
-            font-size: .84rem;
+            font-family: var(--mono);
+            font-size: .8rem;
             line-height: 1.45;
-            max-height: 220px;
+            max-height: 200px;
             overflow: auto;
-            padding: .65rem;
-            background: var(--surface2);
+            padding: .75rem;
+            background: rgba(0, 0, 0, .35);
             border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
+            border: 1px solid var(--glass-border);
         }
         details.danger-zone summary {
             cursor: pointer;
-            color: var(--danger);
-            font-weight: 600;
-            font-size: .78rem;
+            color: var(--rose);
+            font-weight: 700;
+            font-size: .75rem;
+            list-style: none;
         }
+        details.danger-zone summary::-webkit-details-marker { display: none; }
         details.danger-zone form {
-            margin-top: .5rem;
-            padding: .75rem;
-            background: var(--surface2);
+            margin-top: .65rem;
+            padding: .85rem;
+            background: rgba(251, 113, 133, .06);
             border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
+            border: 1px solid rgba(251, 113, 133, .2);
         }
         .mobile-nav {
             display: none;
             position: sticky;
             top: 0;
-            z-index: 10;
-            background: rgba(10, 14, 20, .92);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            padding: .65rem 1rem;
-            margin: -1.25rem -1.5rem 1rem;
+            z-index: 20;
+            padding: .75rem 0 1rem;
+            margin: -0.5rem 0 1.25rem;
+            background: linear-gradient(180deg, var(--void) 70%, transparent);
         }
         .mobile-nav select {
             width: 100%;
-            background: var(--surface2);
-            border: 1px solid var(--border);
+            background: var(--elev-2);
+            border: 1px solid var(--glass-border);
             color: var(--text);
             border-radius: var(--radius-sm);
-            padding: .5rem;
+            padding: .65rem .75rem;
             font: inherit;
+            font-weight: 600;
         }
+        .broadcast-wrap { max-width: 860px; }
         @media (max-width: 960px) {
             .layout { flex-direction: column; }
             .sidebar { display: none; }
             .mobile-nav { display: block; }
-            main { padding-top: .5rem; }
+            .main-area { padding: 1rem 1.1rem 2.5rem; }
+            .topbar { flex-direction: column; align-items: flex-start; }
+            .hint-inline { text-align: left; }
         }
         @media (max-width: 1100px) {
             table.responsive thead { display: none; }
             table.responsive tbody tr {
                 display: block;
-                border-bottom: 1px solid var(--border);
-                padding: .75rem 0;
+                border-bottom: 1px solid var(--glass-border);
+                padding: .85rem 0;
+                margin: 0 .35rem;
             }
             table.responsive tbody td {
                 display: grid;
-                grid-template-columns: minmax(100px, 38%) 1fr;
-                gap: .35rem .75rem;
-                padding: .35rem .85rem;
+                grid-template-columns: minmax(110px, 36%) 1fr;
+                gap: .4rem .8rem;
+                padding: .4rem .5rem;
                 border: 0;
-                text-align: left;
             }
             table.responsive tbody td::before {
                 content: attr(data-label);
-                font-size: .68rem;
+                font-size: .62rem;
                 text-transform: uppercase;
-                letter-spacing: .04em;
-                color: var(--muted);
-                font-weight: 650;
+                letter-spacing: .06em;
+                color: var(--text-dim);
+                font-weight: 700;
             }
         }
     </style>
 </head>
 <body>
+    <div class="app-bg" aria-hidden="true"></div>
     @php
         $broadcastPending = session('fitbot_broadcast_pending');
         $segmentLabels = [
@@ -504,17 +732,22 @@
 
     <div class="layout">
         <aside class="sidebar">
-            <div class="brand">FitBot</div>
-            <h1>Админка</h1>
+            <div class="brand-lockup">
+                <div class="brand-mark">F</div>
+                <div class="brand-text">
+                    <p class="brand">FitBot</p>
+                    <h1>Control</h1>
+                </div>
+            </div>
             <nav class="nav">
-                <a href="#metrics"><span class="ic">📊</span> Метрики</a>
-                <a href="#funnel"><span class="ic">🪜</span> Воронка</a>
-                <a href="#broadcast"><span class="ic">✈️</span> Рассылка</a>
-                <a href="#support"><span class="ic">✉️</span> Поддержка</a>
-                <a href="#users"><span class="ic">👥</span> Пользователи</a>
+                <a href="#metrics"><span class="ic">◆</span> Метрики</a>
+                <a href="#funnel"><span class="ic">▤</span> Воронка</a>
+                <a href="#broadcast"><span class="ic">✦</span> Рассылка</a>
+                <a href="#support"><span class="ic">✉</span> Поддержка</a>
+                <a href="#users"><span class="ic">◎</span> Пользователи</a>
             </nav>
             <div class="sidebar-foot">
-                <div class="meta">Данные на {{ $generatedAt->format('d.m.Y H:i') }}</div>
+                <div class="meta">snapshot<br>{{ $generatedAt->format('d.m.Y H:i') }}</div>
                 <form class="inline" method="post" action="{{ url('/admin/logout') }}">
                     @csrf
                     <button type="submit" class="btn-ghost">Выйти</button>
@@ -522,11 +755,22 @@
             </div>
         </aside>
 
-        <main>
+        <main class="main-area">
+            <header class="topbar">
+                <div>
+                    <p class="topbar-kicker">Операционная панель</p>
+                    <h1 class="topbar-title">FitBot Control</h1>
+                </div>
+                <div class="topbar-meta">
+                    <span class="pill-live"><span class="dot"></span> live</span>
+                    <time id="admin-clock" datetime="{{ $generatedAt->toIso8601String() }}">—</time>
+                </div>
+            </header>
+
             <div class="mobile-nav">
-                <label for="jump" class="sr-only" style="position:absolute;clip:rect(0,0,0,0);">Раздел</label>
+                <label for="jump" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;">Раздел</label>
                 <select id="jump" onchange="if(this.value) location.hash=this.value">
-                    <option value="">Перейти к разделу…</option>
+                    <option value="">Раздел…</option>
                     <option value="#metrics">Метрики</option>
                     <option value="#funnel">Воронка</option>
                     <option value="#broadcast">Рассылка</option>
@@ -550,94 +794,88 @@
 
             <section class="section" id="metrics">
                 <div class="section-head">
-                    <h2>Сводка</h2>
-                    <span class="hint-inline">Живые цифры по базе и активности</span>
+                    <h2><span class="section-idx">01</span> Сводка</h2>
+                    <span class="hint-inline">База, активность, чек-ины и планы в одном взгляде</span>
                 </div>
-                <div class="kpi-grid">
-                    <div class="kpi">
-                        <div class="ic-row">
-                            <span class="ic">👤</span>
-                            @if ($stats['users_new_7d'] > 0)
-                                <span class="delta ok">+{{ $stats['users_new_7d'] }} за 7д</span>
-                            @endif
-                        </div>
-                        <strong>{{ $stats['users_total'] }}</strong>
-                        <div class="label">пользователей всего</div>
-                        <div class="sub">Онбординг завершён: {{ $stats['users_completed_onboarding'] }} · в процессе: {{ $stats['users_in_onboarding'] }}</div>
+                <div class="hero-grid">
+                    <div class="hero-card cyan">
+                        <div class="hero-label">Пользователи</div>
+                        <div class="hero-value">{{ $stats['users_total'] }}</div>
+                        <div class="hero-sub">Онбординг готов: {{ $stats['users_completed_onboarding'] }} · в процессе: {{ $stats['users_in_onboarding'] }}</div>
+                        @if ($stats['users_new_7d'] > 0)
+                            <span class="hero-badge">+{{ $stats['users_new_7d'] }} за 7 дней</span>
+                        @endif
                     </div>
-                    <div class="kpi tone-ok">
-                        <div class="ic-row"><span class="ic">✓</span>
-                            @if ($engPct !== null)
-                                <span class="delta ok">{{ $engPct }}% онбординг → чек-ин</span>
-                            @endif
-                        </div>
-                        <strong>{{ $stats['users_active_7d'] }}</strong>
-                        <div class="label">активны 7 дней (все)</div>
-                        <div class="sub">Среди завершивших онбординг: {{ $stats['users_active_7d_completed'] }} · был завершённый чек-ин за 7 календарных дней</div>
+                    <div class="hero-card mint">
+                        <div class="hero-label">Активность 7 дней</div>
+                        <div class="hero-value">{{ $stats['users_active_7d'] }}</div>
+                        <div class="hero-sub">Из завершивших онбординг: {{ $stats['users_active_7d_completed'] }} с чек-ином за неделю</div>
+                        @if ($engPct !== null)
+                            <span class="hero-badge">{{ $engPct }}% вовлечённость</span>
+                        @endif
                     </div>
-                    <div class="kpi tone-warn">
-                        <div class="ic-row"><span class="ic">⏸</span></div>
+                    <div class="hero-card violet">
+                        <div class="hero-label">Чек-ины сегодня</div>
+                        <div class="hero-value">{{ $stats['checks_today'] }}</div>
+                        <div class="hero-sub">Всего закрытых за всё время: {{ $stats['checks_completed_total'] }}</div>
+                    </div>
+                </div>
+                <div class="bento">
+                    <div class="mini-kpi warn">
+                        <div class="mk-ic">⏸</div>
                         <strong>{{ $stats['users_dormant_7d_completed'] }}</strong>
-                        <div class="label">«тишина» 7+ дней</div>
-                        <div class="sub">Онбординг готов, но без чек-ина 7 дней · 14+ дней: {{ $stats['users_dormant_14d_completed'] }}</div>
+                        <div class="mk-label">тишина 7+ дней</div>
+                        <div class="mk-sub">14+ дней: {{ $stats['users_dormant_14d_completed'] }}</div>
                     </div>
-                    <div class="kpi tone-danger">
-                        <div class="ic-row"><span class="ic">❄</span></div>
+                    <div class="mini-kpi danger">
+                        <div class="mk-ic">✕</div>
                         <strong>{{ $stats['users_completed_never_checked'] }}</strong>
-                        <div class="label">ни разу не чекнулись</div>
-                        <div class="sub">После онбординга нет ни одного завершённого дня</div>
+                        <div class="mk-label">не чекались после онбординга</div>
+                        <div class="mk-sub">нужен пинок или сегмент</div>
                     </div>
-                    <div class="kpi">
-                        <div class="ic-row"><span class="ic">📅</span></div>
-                        <strong>{{ $stats['checks_today'] }}</strong>
-                        <div class="label">чек-инов сегодня</div>
-                        <div class="sub">Всего завершённых за всё время: {{ $stats['checks_completed_total'] }}</div>
-                    </div>
-                    <div class="kpi">
-                        <div class="ic-row"><span class="ic">📆</span></div>
+                    <div class="mini-kpi">
+                        <div class="mk-ic">📆</div>
                         <strong>{{ $stats['checks_week'] }}</strong>
-                        <div class="label">чек-инов (неделя)</div>
-                        <div class="sub">Календарная неделя · баллов: {{ $stats['points_week_all_users'] }} · ср. балл/чек: {{ $stats['avg_score_per_check_week'] ?? '—' }}</div>
+                        <div class="mk-label">чек-инов (календ. неделя)</div>
+                        <div class="mk-sub">баллов: {{ $stats['points_week_all_users'] }} · ср./чек: {{ $stats['avg_score_per_check_week'] ?? '—' }}</div>
                     </div>
-                    <div class="kpi">
-                        <div class="ic-row"><span class="ic">🖼</span></div>
+                    <div class="mini-kpi">
+                        <div class="mk-ic">🖼</div>
                         <strong>{{ $stats['photos_total'] }}</strong>
-                        <div class="label">фото в базе</div>
-                        <div class="sub">Исходящие в TG (лог): {{ $stats['telegram_logged_messages'] }}</div>
+                        <div class="mk-label">фото · TG лог</div>
+                        <div class="mk-sub">{{ $stats['telegram_logged_messages'] }} исходящих</div>
                     </div>
-                    <div class="kpi">
-                        <div class="ic-row"><span class="ic">⚙</span></div>
+                    <div class="mini-kpi">
+                        <div class="mk-ic">⚙</div>
                         <strong>{{ $stats['plan_mode_full'] }}</strong>
-                        <div class="label">режим FitBot</div>
-                        <div class="sub">Свой план: {{ $stats['plan_mode_discipline'] }} · legacy ккал: {{ $stats['plan_legacy_calories'] }}</div>
+                        <div class="mk-label">режим FitBot</div>
+                        <div class="mk-sub">свой: {{ $stats['plan_mode_discipline'] }} · legacy ккал: {{ $stats['plan_legacy_calories'] }}</div>
                     </div>
-                    <div class="kpi tone-ok">
-                        <div class="ic-row"><span class="ic">✉️</span>
-                            <a href="#support" class="delta ok" style="text-decoration:none;color:inherit;">открыть ↓</a>
-                        </div>
+                    <div class="mini-kpi">
+                        <div class="mk-ic">✉️</div>
                         <strong>{{ $supportMessagesTotal }}</strong>
-                        <div class="label">обращений в поддержку</div>
-                        <div class="sub">Кнопка «Написать в поддержку» в боте · ниже последние записи</div>
+                        <div class="mk-label">обращения</div>
+                        <div class="mk-sub"><a href="#support" style="color:var(--cyan);text-decoration:none;font-weight:700;">открыть раздел ↓</a></div>
                     </div>
                 </div>
             </section>
 
             <section class="section" id="funnel">
                 <div class="section-head">
-                    <h2>Воронка онбординга</h2>
-                    <span class="hint-inline">Где застревают (непустой шаг)</span>
+                    <h2><span class="section-idx">02</span> Воронка онбординга</h2>
+                    <span class="hint-inline">Шаги с непустым <code style="font-family:var(--mono);font-size:.75em;opacity:.8;">onboarding_step</code></span>
                 </div>
                 <div class="panel">
                     @if (count($onboardingFunnel) === 0)
-                        <p class="hint" style="margin:0;">Никто не в онбординге.</p>
+                        <p class="hint" style="margin:0;">Онбординг пуст — все либо прошли, либо ещё не стартовали.</p>
                     @else
-                        <p class="hint">Ширина полосы относительно самого частого шага.</p>
+                        <p class="hint">Длина полосы относительно самого частого шага ({{ $funnelMax }}).</p>
                         <div class="funnel-bars">
                             @foreach ($onboardingFunnel as $f)
                                 <div class="funnel-row">
                                     <span class="name">{{ $f['label'] }}</span>
                                     <div class="bar-wrap">
-                                        <div class="bar" style="width: {{ max(4, round(100 * $f['count'] / $funnelMax)) }}%"></div>
+                                        <div class="bar" style="width: {{ max(5, round(100 * $f['count'] / $funnelMax)) }}%"></div>
                                     </div>
                                     <span class="cnt">{{ $f['count'] }}</span>
                                 </div>
@@ -649,15 +887,15 @@
 
             <section class="section" id="broadcast">
                 <div class="section-head">
-                    <h2>Рассылка в Telegram</h2>
-                    <span class="hint-inline">Двухшаговое подтверждение</span>
+                    <h2><span class="section-idx">03</span> Рассылка Telegram</h2>
+                    <span class="hint-inline">Предпросмотр → подтверждение · без HTML</span>
                 </div>
-                <div class="panel highlight" style="max-width: 820px;">
-                    <p class="hint"><strong>Как отправить:</strong> выбери сегмент и текст → <strong>Показать получателей</strong> → проверь число и черновик → отметь галочку и подтверди. Без HTML, до ~4090 символов. Между отправками есть небольшая задержка, чтобы не упереться в лимиты API.</p>
+                <div class="panel panel-glow broadcast-wrap">
+                    <p class="hint"><strong>Поток:</strong> сегмент + текст → <strong>Показать получателей</strong> → сверка числа → галочка → отправка. До ~4090 символов; между юзерами есть задержка.</p>
 
                     @if (is_array($broadcastPending))
-                        <div class="preview-box" style="border-color: rgba(77,159,255,.35);">
-                            <strong>Черновик рассылки</strong><br>
+                        <div class="preview-box">
+                            <strong>Черновик</strong><br>
                             <span class="no" style="font-size:.82rem;">Сегмент:</span>
                             <strong>{{ $segmentLabels[$broadcastPending['segment']] ?? $broadcastPending['segment'] }}</strong>
                             · получателей: <strong class="num">{{ $broadcastPending['recipient_count'] }}</strong>
@@ -668,10 +906,10 @@
                                 <input type="hidden" name="segment" value="{{ $broadcastPending['segment'] }}">
                                 <label style="display:flex;gap:.5rem;align-items:flex-start;margin:.4rem 0;">
                                     <input type="checkbox" name="confirm_broadcast" value="1" required>
-                                    <span>Отправить ровно <strong>{{ $broadcastPending['recipient_count'] }}</strong> пользователям (текст и сегмент совпадают с черновиком)</span>
+                                    <span>Отправить <strong>{{ $broadcastPending['recipient_count'] }}</strong> пользователям</span>
                                 </label>
                                 <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.65rem;">
-                                    <button type="submit" class="btn">Подтвердить отправку</button>
+                                    <button type="submit" class="btn">Подтвердить</button>
                                 </div>
                             </form>
                             <form method="post" action="{{ route('admin.broadcast.cancel') }}" style="margin-top:.5rem;">
@@ -685,7 +923,7 @@
                         @csrf
                         <div class="toolbar" style="margin-bottom:.65rem;">
                             <div class="field" style="flex:1;min-width:240px;">
-                                <label for="seg">Сегмент аудитории</label>
+                                <label for="seg">Сегмент</label>
                                 <select id="seg" name="segment">
                                     @foreach ($segmentLabels as $sid => $slabel)
                                         <option value="{{ $sid }}" @selected(old('segment', is_array($broadcastPending) ? $broadcastPending['segment'] : 'all_completed') === $sid)>{{ $slabel }}</option>
@@ -694,7 +932,7 @@
                             </div>
                         </div>
                         <div class="field">
-                            <label for="msg">Текст сообщения</label>
+                            <label for="msg">Текст</label>
                             <textarea id="msg" class="msg" name="message" rows="6" required placeholder="Текст для Telegram…">{{ old('message', is_array($broadcastPending) ? $broadcastPending['message'] : '') }}</textarea>
                         </div>
                         <button type="submit" class="btn" style="margin-top:.75rem;">Показать получателей</button>
@@ -704,14 +942,14 @@
 
             <section class="section" id="support">
                 <div class="section-head">
-                    <h2>Поддержка из бота</h2>
-                    <span class="hint-inline">Баги и идеи · всего {{ $supportMessagesTotal }}</span>
+                    <h2><span class="section-idx">04</span> Поддержка</h2>
+                    <span class="hint-inline">{{ $supportMessagesTotal }} записей в базе</span>
                 </div>
                 <div class="panel">
                     @if ($supportMessages->isEmpty())
-                        <p class="hint" style="margin:0;">Пока нет сообщений. После миграции таблицы и первых обращений они появятся здесь.</p>
+                        <p class="hint" style="margin:0;">Пока пусто — ждём первые сообщения из бота.</p>
                     @else
-                        <p class="hint">С новых к старым (до 100 шт.). Пользователь удалён — строка пропадёт вместе с сообщениями (cascade).</p>
+                        <p class="hint">Свежие сверху (до 100). Удаление пользователя каскадом убирает и обращения.</p>
                         <div class="scroll-table">
                             <table>
                                 <thead>
@@ -750,14 +988,14 @@
 
             <section class="section" id="users">
                 <div class="section-head">
-                    <h2>Пользователи</h2>
-                    <span class="hint-inline">До {{ $rows->count() }} строк · сортировка по серии среди последних 800 по ID</span>
+                    <h2><span class="section-idx">05</span> Пользователи</h2>
+                    <span class="hint-inline">До {{ $rows->count() }} строк · серия: до 800 по ID при сортировке</span>
                 </div>
-                <div class="panel" style="padding-bottom:1.25rem;">
+                <div class="panel" style="padding-bottom:1.35rem;">
                     <form method="get" action="{{ url('/admin') }}" class="toolbar" id="user-filters">
                         <div class="field">
                             <label for="q">Поиск</label>
-                            <input id="q" type="text" name="q" value="{{ $filters['q'] }}" placeholder="Имя, @username, id, telegram id…" autocomplete="off">
+                            <input id="q" type="text" name="q" value="{{ $filters['q'] }}" placeholder="Имя, @username, id…" autocomplete="off">
                         </div>
                         <div class="field">
                             <label for="filter">Срез</label>
@@ -891,17 +1129,17 @@
                                                 <summary>Удалить…</summary>
                                                 <form method="post" action="{{ route('admin.user.destroy', $u) }}">
                                                     @csrf
-                                                    <p class="hint" style="margin-top:0;">Удаляет аккаунт и очищает запомненные сообщения бота в чате.</p>
+                                                    <p class="hint" style="margin-top:0;">Аккаунт и лог исходящих в чате — по максимуму.</p>
                                                     <label style="display:flex;gap:.4rem;align-items:flex-start;margin:.4rem 0;">
                                                         <input type="checkbox" name="confirm_delete" value="1" required>
-                                                        <span>Подтверждаю удаление</span>
+                                                        <span>Подтверждаю</span>
                                                     </label>
                                                     <label style="display:flex;gap:.4rem;align-items:flex-start;margin:.4rem 0;">
                                                         <input type="hidden" name="notify_user" value="0">
                                                         <input type="checkbox" name="notify_user" value="1" checked>
-                                                        <span>Уведомить пользователя в Telegram</span>
+                                                        <span>Уведомить в Telegram</span>
                                                     </label>
-                                                    <button type="submit" class="btn btn-danger" style="margin-top:.4rem;">Удалить навсегда</button>
+                                                    <button type="submit" class="btn btn-danger" style="margin-top:.4rem;">Удалить</button>
                                                 </form>
                                             </details>
                                         </td>
@@ -910,12 +1148,22 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="foot-note"><b>Пульс</b> — насколько недавно человек закрывал чек-ин и давно ли в боте (это не игровой уровень). <b>Уровень</b> — геймификация по <b>текущей серии</b> закрытых чек-инов подряд (как в боте в «Профиль»): 0–7 Новичок, 8–14 Подснежник, 15–30 Любитель, 31–60 Опытный, 61+ Босс. Колонка «7 дн» — сумма баллов за последние 7 календарных дней.</p>
+                    <p class="foot-note"><b>Пульс</b> — свежесть чек-инов и давность в боте (не игровой уровень). <b>Уровень</b> — серия закрытых дней подряд: 0–7 / 8–14 / 15–30 / 31–60 / 61+. <b>7 дн</b> — сумма баллов за 7 календарных дней.</p>
                 </div>
             </section>
         </main>
     </div>
     <script>
+        (function () {
+            function tick() {
+                var el = document.getElementById('admin-clock');
+                if (!el) return;
+                var d = new Date();
+                el.textContent = d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+            tick();
+            setInterval(tick, 1000);
+        })();
         document.querySelectorAll('.copy-tg').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var v = btn.getAttribute('data-copy');

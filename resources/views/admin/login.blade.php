@@ -3,114 +3,152 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>FitBot — вход в админку</title>
+    <title>FitBot — вход</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg0: #0a0e14;
-            --surface: #141c2b;
-            --surface2: #1c2739;
-            --text: #e8edf5;
-            --muted: #8b9cb3;
-            --accent: #4d9fff;
-            --danger: #f07178;
-            --warn: #f0b429;
-            --border: rgba(255, 255, 255, .08);
+            --void: #050608;
+            --text: #f2f5fa;
+            --muted: #8b93a8;
+            --cyan: #22d3ee;
+            --rose: #fb7185;
+            --amber: #fbbf24;
+            --border: rgba(255, 255, 255, .1);
         }
         * { box-sizing: border-box; }
         body {
-            font-family: "Segoe UI", system-ui, sans-serif;
-            min-height: 100vh;
             margin: 0;
+            min-height: 100vh;
+            font-family: "Outfit", system-ui, sans-serif;
+            color: var(--text);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 1.5rem;
-            background: var(--bg0);
-            background-image:
-                radial-gradient(ellipse 100% 80% at 50% -30%, rgba(77, 159, 255, .22), transparent 55%),
-                radial-gradient(ellipse 60% 50% at 100% 100%, rgba(199, 146, 234, .1), transparent 50%);
-            color: var(--text);
+            background: var(--void);
+            position: relative;
+        }
+        .bg {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 20% 0%, rgba(34, 211, 238, .2), transparent 50%),
+                radial-gradient(ellipse 60% 50% at 100% 100%, rgba(167, 139, 250, .12), transparent 45%);
+            pointer-events: none;
         }
         .card {
+            position: relative;
             width: 100%;
-            max-width: 400px;
-            background: var(--surface);
+            max-width: 420px;
+            padding: 2rem 2rem 2.25rem;
+            border-radius: 20px;
+            background: rgba(18, 22, 30, .82);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.75rem 1.85rem 2rem;
-            box-shadow: 0 16px 48px rgba(0, 0, 0, .4);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(34, 211, 238, .08);
         }
-        .brand {
+        .mark {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--cyan), #0891b2);
+            display: grid;
+            place-items: center;
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--void);
+            margin-bottom: 1.25rem;
+            box-shadow: 0 8px 28px rgba(34, 211, 238, .4);
+        }
+        .kicker {
             font-size: .68rem;
-            font-weight: 700;
-            letter-spacing: .14em;
+            font-weight: 800;
+            letter-spacing: .2em;
             text-transform: uppercase;
-            color: var(--accent);
-            margin-bottom: .35rem;
+            color: var(--cyan);
+            margin: 0 0 .35rem;
         }
         h1 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            margin: 0 0 1.35rem;
-            letter-spacing: -.02em;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            margin: 0 0 1.5rem;
+            background: linear-gradient(120deg, #fff 40%, var(--cyan));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
         }
-        label { display: block; margin-bottom: .45rem; font-size: .82rem; color: var(--muted); font-weight: 500; }
+        label {
+            display: block;
+            margin-bottom: .4rem;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--muted);
+        }
         input[type=password] {
             width: 100%;
-            padding: .65rem .8rem;
-            margin-bottom: 1.1rem;
-            background: var(--surface2);
+            padding: .75rem .9rem;
+            margin-bottom: 1.2rem;
+            background: rgba(0, 0, 0, .35);
             border: 1px solid var(--border);
-            border-radius: 10px;
+            border-radius: 12px;
             color: var(--text);
             font: inherit;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .95rem;
         }
         input[type=password]:focus {
             outline: none;
-            border-color: rgba(77, 159, 255, .5);
-            box-shadow: 0 0 0 3px rgba(77, 159, 255, .12);
+            border-color: rgba(34, 211, 238, .5);
+            box-shadow: 0 0 0 3px rgba(34, 211, 238, .12);
         }
         button {
             width: 100%;
-            background: linear-gradient(180deg, #5aa8ff, var(--accent));
-            color: #fff;
+            padding: .75rem 1.2rem;
             border: 0;
-            border-radius: 10px;
-            padding: .65rem 1.2rem;
+            border-radius: 12px;
             font: inherit;
-            font-weight: 650;
+            font-weight: 800;
             cursor: pointer;
-            box-shadow: 0 4px 20px rgba(77, 159, 255, .3);
+            background: linear-gradient(135deg, #22d3ee, #06b6d4);
+            color: var(--void);
+            box-shadow: 0 6px 24px rgba(34, 211, 238, .35);
+            transition: filter .15s;
         }
-        button:hover { filter: brightness(1.05); }
+        button:hover { filter: brightness(1.06); }
         .err {
-            background: rgba(240, 113, 120, .12);
-            border: 1px solid rgba(240, 113, 120, .35);
-            color: var(--danger);
-            padding: .75rem;
-            border-radius: 10px;
+            background: rgba(251, 113, 133, .1);
+            border: 1px solid rgba(251, 113, 133, .35);
+            color: var(--rose);
+            padding: .85rem 1rem;
+            border-radius: 12px;
             margin-bottom: 1rem;
             font-size: .88rem;
         }
         .warn {
-            background: rgba(240, 180, 41, .1);
-            border: 1px solid rgba(240, 180, 41, .35);
-            padding: .8rem;
-            border-radius: 10px;
+            background: rgba(251, 191, 36, .08);
+            border: 1px solid rgba(251, 191, 36, .3);
+            padding: .9rem 1rem;
+            border-radius: 12px;
             margin-bottom: 1rem;
             font-size: .85rem;
             line-height: 1.45;
             color: var(--text);
         }
-        code { background: var(--surface2); padding: .12rem .4rem; border-radius: 6px; font-size: .82em; }
+        code { font-family: "IBM Plex Mono", monospace; font-size: .82em; background: rgba(0, 0, 0, .35); padding: .15rem .4rem; border-radius: 6px; }
     </style>
 </head>
 <body>
+    <div class="bg" aria-hidden="true"></div>
     <div class="card">
-        <div class="brand">FitBot</div>
-        <h1>Вход в админку</h1>
+        <div class="mark">F</div>
+        <p class="kicker">FitBot</p>
+        <h1>Вход в Control</h1>
         @if (! $configured)
-            <p class="warn">Задайте <code>FITBOT_ADMIN_PASSWORD</code> в <code>.env</code> на сервере.</p>
+            <p class="warn">Задайте <code>FITBOT_ADMIN_PASSWORD</code> в <code>.env</code>.</p>
         @endif
         @if ($errors->any())
             <div class="err">{{ $errors->first() }}</div>
