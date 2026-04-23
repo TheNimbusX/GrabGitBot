@@ -842,7 +842,6 @@
             font: inherit;
             font-weight: 600;
         }
-        .broadcast-wrap { max-width: 860px; }
         @media (max-width: 960px) {
             .layout { flex-direction: column; }
             .sidebar { display: none; }
@@ -1078,7 +1077,7 @@
                     <h2><span class="section-idx">03</span> Рассылка Telegram</h2>
                     <span class="hint-inline">Предпросмотр → подтверждение · без HTML</span>
                 </div>
-                <div class="panel panel-glow broadcast-wrap">
+                <div class="panel panel-glow">
                     <p class="hint"><strong>Поток:</strong> сегмент + текст → <strong>Показать получателей</strong> → сверка числа → галочка → отправка. До ~4090 символов; между юзерами есть задержка.</p>
 
                     @if (is_array($broadcastPending))
@@ -1110,7 +1109,7 @@
                     <form method="post" action="{{ route('admin.broadcast.preview') }}" class="broadcast-form" style="margin-top:1rem;">
                         @csrf
                         <div class="toolbar" style="margin-bottom:.85rem;">
-                            <div class="field" style="flex:1;min-width:min(100%,320px);max-width:100%;">
+                            <div class="field" style="flex:1;min-width:0;width:100%;">
                                 <label for="seg">Сегмент аудитории</label>
                                 <select id="seg" name="segment" class="select-tg">
                                     @foreach ($segmentLabels as $sid => $slabel)
