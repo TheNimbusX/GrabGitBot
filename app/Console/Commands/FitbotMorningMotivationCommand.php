@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Services\FitBot\FitBotMessaging;
+use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -16,7 +17,7 @@ class FitbotMorningMotivationCommand extends Command
 
     protected $description = 'Утро: мягкий тон 1-2 день, крючок 3-6, день 7 отдельно, дальше ровный пул';
 
-    public function handle(TelegramBotService $telegram): int
+    public function handle(TelegramBotService $telegram, RatingService $rating): int
     {
         if ((string) config('telegram.bot_token') === '') {
             $this->error('TELEGRAM_BOT_TOKEN не задан');
@@ -28,7 +29,7 @@ class FitbotMorningMotivationCommand extends Command
         $now = Carbon::now();
         $sent = 0;
 
-        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $dateKey, $now, &$sent) {
+        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $rating, $dateKey, $now, &$sent) {
             foreach ($users as $user) {
                 if (! $user->allowsBotPushAt($now, 'morning')) {
                     continue;
@@ -44,6 +45,21 @@ class FitbotMorningMotivationCommand extends Command
                     $text = FitBotMessaging::pickStable($dateKey, (int) $user->telegram_id, FitBotMessaging::morningHookPool());
                 } else {
                     $text = FitBotMessaging::pickStable($dateKey, (int) $user->telegram_id, FitBotMessaging::morningLongRunPool());
+                }
+
+                $prefix = [];
+                $streak = $rating->checkInStreakDays($user, $now);
+                $todayDone = $rating->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
+                $streakBanner = FitBotMessaging::streakCoreBanner($streak, $todayDone);
+                if ($streakBanner !== null) {
+                    $prefix[] = $streakBanner;
+                }
+                $gym = FitBotMessaging::workoutSkippedStreakNudge($rating->consecutiveSkippedWorkoutDays($user, $now));
+                if ($gym !== null) {
+                    $prefix[] = $gym;
+                }
+                if ($prefix !== []) {
+                    $text = implode("\n\n", $prefix)."\n\n".$text;
                 }
 
                 try {

@@ -1620,6 +1620,15 @@ class FitBotService
             if ($streakLine !== null) {
                 $blocks[] = $streakLine;
             }
+            $carry = FitBotMessaging::streakCarryCompactLine($streak);
+            if ($carry !== null) {
+                $blocks[] = $carry;
+            }
+            $skipRun = $this->rating->consecutiveSkippedWorkoutDays($user);
+            $gymNudge = FitBotMessaging::workoutSkippedStreakNudge($skipRun);
+            if ($gymNudge !== null) {
+                $blocks[] = $gymNudge;
+            }
             if ($isFirstEverCompletedCheck) {
                 $blocks[] = FitBotMessaging::firstEverCheckClosing();
             }
@@ -1839,8 +1848,23 @@ class FitBotService
             $parts[] = '⚠️ '.$error;
             $parts[] = '';
         }
+        $streak = $this->rating->checkInStreakDays($user);
+        $streakBanner = FitBotMessaging::streakCoreBanner($streak, false);
+        if ($streakBanner !== null) {
+            $parts[] = $streakBanner;
+            $parts[] = '';
+        }
         $parts[] = '<b>Чек-ин за сегодня</b>';
         $parts = array_merge($parts, $this->checkProgressStatusLines($check));
+        if ($check->diet_rating && $check->sleep_rating && ! $check->workout_rating) {
+            $gymNudge = FitBotMessaging::workoutSkippedStreakNudge(
+                $this->rating->consecutiveSkippedWorkoutDays($user)
+            );
+            if ($gymNudge !== null) {
+                $parts[] = '';
+                $parts[] = $gymNudge;
+            }
+        }
         $parts[] = '';
         $parts[] = $this->checkProgressCurrentQuestionText($user, $check);
 

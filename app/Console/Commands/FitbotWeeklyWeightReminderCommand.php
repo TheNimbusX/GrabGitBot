@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Services\FitBot\FitBotMessaging;
+use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -16,7 +17,7 @@ class FitbotWeeklyWeightReminderCommand extends Command
 
     protected $description = 'Раз в неделю: напоминание обновить вес (тихие часы и флаг уведомлений)';
 
-    public function handle(TelegramBotService $telegram): int
+    public function handle(TelegramBotService $telegram, RatingService $rating): int
     {
         if ((string) config('telegram.bot_token') === '') {
             $this->error('TELEGRAM_BOT_TOKEN не задан');
@@ -25,19 +26,27 @@ class FitbotWeeklyWeightReminderCommand extends Command
         }
 
         $now = Carbon::now();
-        $text = FitBotMessaging::weeklyWeightReminderNudge();
+        $baseText = FitBotMessaging::weeklyWeightReminderNudge();
         $markup = $telegram->inlineKeyboard([
             [['text' => '⚖️ Обновить вес', 'callback_data' => 'wt:start']],
         ]);
         $sent = 0;
 
-        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $now, $text, $markup, &$sent) {
+        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $rating, $now, $baseText, $markup, &$sent) {
             foreach ($users as $user) {
                 if ($user->weight_kg === null) {
                     continue;
                 }
                 if (! $user->allowsBotPushAt($now, 'weekly_weight')) {
                     continue;
+                }
+
+                $text = $baseText;
+                $streak = $rating->checkInStreakDays($user, $now);
+                $todayDone = $rating->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
+                $b = FitBotMessaging::streakCoreBanner($streak, $todayDone);
+                if ($b !== null) {
+                    $text = $b."\n\n".$text;
                 }
 
                 try {

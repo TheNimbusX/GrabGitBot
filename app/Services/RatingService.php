@@ -6,6 +6,7 @@ use App\Enums\CheckRating;
 use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\User;
+use App\Services\FitBot\FitBotMessaging;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -248,20 +249,36 @@ class RatingService
 
     public function formatSummaryMessage(User $user, ?Carbon $now = null): string
     {
+        $now ??= Carbon::now();
         $s = $this->summary($user, $now);
         $streak = $this->checkInStreakDays($user, $now);
+        $todayDone = $this->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
+        $streakBanner = FitBotMessaging::streakCoreBanner($streak, $todayDone);
+        $workoutNudge = FitBotMessaging::workoutSkippedStreakNudge(
+            $this->consecutiveSkippedWorkoutDays($user, $now)
+        );
+
         $lines = [
             '📊 <b>Твой рейтинг дисциплины</b>',
-            '',
+        ];
+        if ($streakBanner !== null) {
+            $lines[] = '';
+            $lines[] = $streakBanner;
+        }
+        if ($workoutNudge !== null) {
+            $lines[] = '';
+            $lines[] = $workoutNudge;
+        }
+        $lines[] = '';
+        $lines = array_merge($lines, [
             '📅 Сегодня: '.$s['day'].' / '.self::MAX_DAILY_POINTS,
             '🗓 Неделя: '.$s['week'].' баллов',
             '📆 Месяц: '.$s['month'].' баллов',
-            '🔥 Дней в ударе подряд: '.$streak,
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
             '',
             $this->weeklyFocusLine($user, $now),
-        ];
+        ]);
 
         return implode("\n", $lines);
     }
@@ -294,6 +311,44 @@ class RatingService
             ->whereDate('check_date', $day->toDateString())
             ->where('is_completed', true)
             ->exists();
+    }
+
+    public function completedCheckOnDate(User $user, Carbon $day): ?DailyCheck
+    {
+        return $user->dailyChecks()
+            ->whereDate('check_date', $day->toDateString())
+            ->where('is_completed', true)
+            ->first();
+    }
+
+    /**
+     * Подряд завершённых дней, где в чек-ине выбрано «прогулял тренировку» (цепочка обрывается на «позанимался» или «отдых»).
+     */
+    public function consecutiveSkippedWorkoutDays(User $user, ?Carbon $now = null): int
+    {
+        $now ??= Carbon::now();
+        $n = 0;
+        $day = $now->copy()->startOfDay();
+
+        if (! $this->hasCompletedCheckOnDate($user, $day)) {
+            $day->subDay();
+        }
+
+        while ($this->hasCompletedCheckOnDate($user, $day)) {
+            $check = $this->completedCheckOnDate($user, $day);
+            if ($check === null) {
+                break;
+            }
+            $v = WorkoutCheckVariant::tryFrom((string) ($check->workout_variant ?? ''));
+            if ($v === WorkoutCheckVariant::Skipped) {
+                $n++;
+                $day->subDay();
+            } else {
+                break;
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -429,10 +484,27 @@ class RatingService
         $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '-';
         $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '-';
 
+        $streak = $this->checkInStreakDays($user, $now);
+        $todayDone = $this->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
+        $streakBanner = FitBotMessaging::streakCoreBanner($streak, $todayDone);
+        $workoutNudge = FitBotMessaging::workoutSkippedStreakNudge(
+            $this->consecutiveSkippedWorkoutDays($user, $now)
+        );
+
         $lines = [
             '📈 <b>Расширенная аналитика</b>',
             '<i>28 дней · по завершённым чек-инам</i>',
-            '',
+        ];
+        if ($streakBanner !== null) {
+            $lines[] = '';
+            $lines[] = $streakBanner;
+        }
+        if ($workoutNudge !== null) {
+            $lines[] = '';
+            $lines[] = $workoutNudge;
+        }
+        $lines[] = '';
+        $lines = array_merge($lines, [
             '✅ Отмечено дней: <b>'.$completedDays.'</b> из '.$calendarDays.' ('.$pctMarked.'%)',
             '⭐ Баллов за период: <b>'.$totalPts.'</b> · в среднем на отмеченный день: <b>'.$avgIfMarked.'</b>/'.self::MAX_DAILY_POINTS,
             '',
@@ -451,7 +523,7 @@ class RatingService
             '',
             '<b>Пики за 28 дней</b>',
             'Лучший: '.$bestStr.' · слабее всего: '.$worstStr,
-        ];
+        ]);
 
         $lines = array_merge($lines, $this->extendedAnalyticsWeightLines($user));
 

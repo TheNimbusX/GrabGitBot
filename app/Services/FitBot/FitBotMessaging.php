@@ -34,6 +34,68 @@ final class FitBotMessaging
         return '▶️ Продолжить';
     }
 
+    public static function pluralRuDays(int $n): string
+    {
+        $n = abs($n) % 100;
+        $n1 = $n % 10;
+        if ($n > 10 && $n < 20) {
+            return 'дней';
+        }
+        if ($n1 === 1) {
+            return 'день';
+        }
+        if ($n1 >= 2 && $n1 <= 4) {
+            return 'дня';
+        }
+
+        return 'дней';
+    }
+
+    /**
+     * Ядро продукта: серия закрытых чек-инов + риск срыва сегодня.
+     *
+     * @param  bool  $todayCheckCompleted  Уже есть завершённый чек-ин за сегодня
+     */
+    public static function streakCoreBanner(int $streak, bool $todayCheckCompleted): ?string
+    {
+        if ($streak < 1) {
+            return null;
+        }
+        $w = self::pluralRuDays($streak);
+        if (! $todayCheckCompleted) {
+            return '🔥 <b>'.$streak.' '.$w.' подряд</b> в закрытых чек-инах.'
+                ."\n".'Сегодня не закроешь день - <b>серия сгорит</b>.';
+        }
+
+        return '🔥 <b>'.$streak.' '.$w.' подряд</b>. Завтра без чек-ина - начнёшь с нуля, не балуйся.';
+    }
+
+    /** После чек-ина для «обычных» дней без milestone-текста. */
+    public static function streakCarryCompactLine(int $streak): ?string
+    {
+        if ($streak < 2) {
+            return null;
+        }
+        if (in_array($streak, [3, 5, 7, 10, 14, 21, 30], true)) {
+            return null;
+        }
+        $w = self::pluralRuDays($streak);
+
+        return '🔥 Уже <b>'.$streak.' '.$w.' подряд</b>. Завтра закрой чек-ин - иначе всё обнулится.';
+    }
+
+    /** Персонализация: цепочка дней с «прогулял тренировку». */
+    public static function workoutSkippedStreakNudge(int $consecutiveSkippedDays): ?string
+    {
+        if ($consecutiveSkippedDays < 3) {
+            return null;
+        }
+        $w = self::pluralRuDays($consecutiveSkippedDays);
+
+        return '🏋️ Уже <b>'.$consecutiveSkippedDays.' '.$w.' подряд</b> в чек-ине отмечаешь «прогулял тренировку».'
+            ."\n".'Это не случайность - так уходят в «потом». Либо выходи на зал/дом, либо честно отметь <b>день отдыха</b> по плану.';
+    }
+
     public static function eveningReminderSoft(RatingService $rating, User $user, Carbon $today): string
     {
         $dayNum = self::dayNumberInBot($user, $today);
@@ -72,9 +134,17 @@ final class FitBotMessaging
         }
 
         $streak = $rating->checkInStreakDays($user, $today);
-        if ($streak >= 3) {
+        $streakLine = self::streakCoreBanner($streak, false);
+        if ($streakLine !== null) {
             $lines[] = '';
-            $lines[] = 'Серия идёт. Сегодня не отметишь - <b>сгорит</b>. Самому себе обиднее всего.';
+            $lines[] = $streakLine;
+        }
+
+        $skipRun = $rating->consecutiveSkippedWorkoutDays($user, $today);
+        $gymNudge = self::workoutSkippedStreakNudge($skipRun);
+        if ($gymNudge !== null) {
+            $lines[] = '';
+            $lines[] = $gymNudge;
         }
 
         return implode("\n", $lines);
@@ -698,7 +768,7 @@ final class FitBotMessaging
 
     public static function onboardingSleepTargetFull(): string
     {
-        return 'Сколько часов сна в цель? Введи число (например <b>7.5</b>).';
+        return 'Сколько часов сна в день нужно? Введи число (например <b>7.5</b>).';
     }
 
     public static function finishFullPlanFooter(): string

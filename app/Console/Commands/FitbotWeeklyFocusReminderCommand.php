@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Services\FitBot\FitBotMessaging;
+use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -16,7 +17,7 @@ class FitbotWeeklyFocusReminderCommand extends Command
 
     protected $description = 'Раз в неделю: напоминание обновить фокус недели (с учётом тихих часов и флага)';
 
-    public function handle(TelegramBotService $telegram): int
+    public function handle(TelegramBotService $telegram, RatingService $rating): int
     {
         if ((string) config('telegram.bot_token') === '') {
             $this->error('TELEGRAM_BOT_TOKEN не задан');
@@ -25,13 +26,21 @@ class FitbotWeeklyFocusReminderCommand extends Command
         }
 
         $now = Carbon::now();
-        $text = FitBotMessaging::weeklyFocusReminderNudge();
+        $baseText = FitBotMessaging::weeklyFocusReminderNudge();
         $sent = 0;
 
-        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $now, $text, &$sent) {
+        $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $rating, $now, $baseText, &$sent) {
             foreach ($users as $user) {
                 if (! $user->allowsBotPushAt($now, 'weekly_focus')) {
                     continue;
+                }
+
+                $text = $baseText;
+                $streak = $rating->checkInStreakDays($user, $now);
+                $todayDone = $rating->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
+                $b = FitBotMessaging::streakCoreBanner($streak, $todayDone);
+                if ($b !== null) {
+                    $text = $b."\n\n".$text;
                 }
 
                 try {
