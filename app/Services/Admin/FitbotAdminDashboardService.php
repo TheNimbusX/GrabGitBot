@@ -23,8 +23,9 @@ class FitbotAdminDashboardService
         $now = Carbon::now();
         $weekStart = $now->copy()->startOfWeek()->toDateString();
         $activeSince = $now->copy()->subDays(6)->startOfDay()->toDateString();
+        $since14 = $now->copy()->subDays(14)->toDateString();
 
-        $stats = $this->aggregateStats($now, $weekStart, $activeSince);
+        $stats = $this->aggregateStats($now, $weekStart, $activeSince, $since14);
 
         $q = trim((string) $request->query('q', ''));
         $filter = (string) $request->query('filter', 'all');
@@ -60,6 +61,22 @@ class FitbotAdminDashboardService
                 });
         } elseif ($filter === 'new7') {
             $userQuery->where('created_at', '>=', $now->copy()->subDays(7)->startOfDay());
+        } elseif ($filter === 'inactive14') {
+            $userQuery->completedFitbotOnboarding()
+                ->whereDoesntHave('dailyChecks', function ($qq) use ($since14) {
+                    $qq->where('is_completed', true)
+                        ->where('check_date', '>=', $since14);
+                });
+        } elseif ($filter === 'never_checked') {
+            $userQuery->completedFitbotOnboarding()
+                ->whereDoesntHave('dailyChecks', function ($qq) {
+                    $qq->where('is_completed', true);
+                });
+        } elseif ($filter === 'low_activity_14d') {
+            $userQuery->completedFitbotOnboarding()->whereRaw(
+                '(select count(*) from daily_checks where daily_checks.user_id = users.id and is_completed = 1 and check_date >= ?) <= 1',
+                [$since14]
+            );
         }
 
         $userQuery
@@ -102,12 +119,19 @@ class FitbotAdminDashboardService
 
             $completedN = (int) ($user->completed_checks_count ?? 0);
             $lifePts = (float) ($user->lifetime_points ?? 0);
+            $onboardingDone = $user->hasCompletedOnboarding();
+            $daysSinceCheck = $lastCheck !== null
+                ? (int) $lastCheck->copy()->startOfDay()->diffInDays($now->copy()->startOfDay())
+                : null;
 
             return [
                 'user' => $user,
                 'streak' => $this->computeStreakDays($dateStrings, $now),
                 'last_check' => $lastCheck,
-                'onboarding_done' => $user->hasCompletedOnboarding(),
+                'days_since_check' => $daysSinceCheck,
+                'pulse' => $this->userEngagementPulse($user, $onboardingDone, $daysSinceCheck, $now),
+                'onboarding_done' => $onboardingDone,
+                'onboarding_hint' => ! $onboardingDone ? $this->onboardingStepLabelForValue($user->onboarding_step) : null,
                 'completed_checks' => $completedN,
                 'photos_count' => (int) ($user->photos_count ?? 0),
                 'lifetime_points' => (int) $lifePts,
@@ -143,11 +167,12 @@ class FitbotAdminDashboardService
                 'sort' => $sort,
             ],
             'onboardingFunnel' => $this->onboardingFunnelCounts(),
+            'generatedAt' => $now->copy(),
         ];
     }
 
-    /** @return array<string, int|float|string> */
-    private function aggregateStats(Carbon $now, string $weekStart, string $activeSince): array
+    /** @return array<string, int|float|string|null> */
+    private function aggregateStats(Carbon $now, string $weekStart, string $activeSince, string $since14): array
     {
         $completedScope = User::query()->completedFitbotOnboarding();
 
@@ -177,6 +202,13 @@ class FitbotAdminDashboardService
             })
             ->count();
 
+        $usersCompletedN = (int) (clone $completedScope)->count();
+        $usersActive7AmongCompleted = (int) (clone $completedScope)
+            ->whereHas('dailyChecks', function ($q) use ($activeSince) {
+                $q->where('is_completed', true)->where('check_date', '>=', $activeSince);
+            })
+            ->count();
+
         $usersNew7 = (int) User::query()
             ->where('created_at', '>=', $now->copy()->subDays(7)->startOfDay())
             ->count();
@@ -194,9 +226,29 @@ class FitbotAdminDashboardService
             ->whereNotNull('daily_calories_target')
             ->count();
 
+        $usersDormant7 = (int) (clone $completedScope)
+            ->whereDoesntHave('dailyChecks', function ($q) use ($activeSince) {
+                $q->where('is_completed', true)->where('check_date', '>=', $activeSince);
+            })
+            ->count();
+        $usersDormant14 = (int) (clone $completedScope)
+            ->whereDoesntHave('dailyChecks', function ($q) use ($since14) {
+                $q->where('is_completed', true)->where('check_date', '>=', $since14);
+            })
+            ->count();
+        $usersNeverChecked = (int) User::query()->completedFitbotOnboarding()
+            ->whereDoesntHave('dailyChecks', function ($q) {
+                $q->where('is_completed', true);
+            })
+            ->count();
+
+        $engagementOfCompletedPct = $usersCompletedN > 0
+            ? round(100 * $usersActive7AmongCompleted / $usersCompletedN, 1)
+            : null;
+
         return [
             'users_total' => User::query()->count(),
-            'users_completed_onboarding' => (clone $completedScope)->count(),
+            'users_completed_onboarding' => $usersCompletedN,
             'users_in_onboarding' => User::query()
                 ->whereNotNull('onboarding_step')
                 ->where('onboarding_step', '!=', '')
@@ -207,7 +259,12 @@ class FitbotAdminDashboardService
             'points_week_all_users' => $pointsWeekAll,
             'avg_score_per_check_week' => $avgScoreWeek !== null ? round((float) $avgScoreWeek, 2) : null,
             'users_active_7d' => $usersActive7,
+            'users_active_7d_completed' => $usersActive7AmongCompleted,
             'users_new_7d' => $usersNew7,
+            'users_dormant_7d_completed' => $usersDormant7,
+            'users_dormant_14d_completed' => $usersDormant14,
+            'users_completed_never_checked' => $usersNeverChecked,
+            'engagement_completed_7d_pct' => $engagementOfCompletedPct,
             'photos_total' => $photosTotal,
             'telegram_logged_messages' => $loggedMsgs,
             'plan_mode_full' => $planFull,
@@ -248,6 +305,42 @@ class FitbotAdminDashboardService
         }
 
         return $streak;
+    }
+
+    private function userEngagementPulse(User $user, bool $onboardingDone, ?int $daysSinceCheck, Carbon $now): string
+    {
+        if (! $onboardingDone) {
+            return 'onboarding';
+        }
+        if ($user->created_at && $user->created_at->gte($now->copy()->subDays(7)->startOfDay())) {
+            return 'new';
+        }
+        if ($daysSinceCheck === null) {
+            return 'cold';
+        }
+        if ($daysSinceCheck <= 1) {
+            return 'hot';
+        }
+        if ($daysSinceCheck <= 6) {
+            return 'warm';
+        }
+        if ($daysSinceCheck <= 13) {
+            return 'cool';
+        }
+
+        return 'cold';
+    }
+
+    private function onboardingStepLabelForValue(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            return $this->onboardingStepLabel(OnboardingStep::from($value));
+        } catch (\ValueError) {
+            return $value;
+        }
     }
 
     /** @return list<array{key: string, label: string, count: int}> */
