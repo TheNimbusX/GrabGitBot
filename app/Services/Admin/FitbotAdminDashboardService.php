@@ -145,6 +145,10 @@ class FitbotAdminDashboardService
                 'days_in_bot' => $user->created_at !== null
                     ? (int) $now->copy()->startOfDay()->diffInDays($user->created_at->copy()->startOfDay())
                     : null,
+                'last_message_to_bot' => $user->last_message_to_bot_at,
+                'days_since_message_to_bot' => $user->last_message_to_bot_at !== null
+                    ? (int) $user->last_message_to_bot_at->copy()->startOfDay()->diffInDays($now->copy()->startOfDay())
+                    : null,
             ];
         });
 
@@ -158,6 +162,8 @@ class FitbotAdminDashboardService
             $rows = $rows->sortByDesc(fn (array $r) => $r['week_points'])->values();
         } elseif ($sort === 'last_check_desc') {
             $rows = $rows->sortByDesc(fn (array $r) => $r['last_check']?->timestamp ?? 0)->values();
+        } elseif ($sort === 'last_message_desc') {
+            $rows = $rows->sortByDesc(fn (array $r) => $r['last_message_to_bot']?->timestamp ?? 0)->values();
         } elseif ($sort === 'created_asc') {
             $rows = $rows->sortBy(fn (array $r) => $r['user']->created_at?->timestamp ?? 0)->values();
         } else {

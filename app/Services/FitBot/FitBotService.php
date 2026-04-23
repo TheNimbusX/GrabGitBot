@@ -79,6 +79,7 @@ class FitBotService
         }
 
         $user = $this->syncUser($telegramId, $from);
+        $this->touchLastMessageToBot($user, isset($msg['date']) ? (int) $msg['date'] : null);
 
         $text = $this->normalizeMessageText((string) ($msg['text'] ?? ''));
         $isCommand = $text !== '' && Str::startsWith($text, '/');
@@ -2048,6 +2049,20 @@ class FitBotService
         }
 
         return $user;
+    }
+
+    /** Время из Telegram message.date (UTC). Не уменьшаем поле при редких поздних доставках. */
+    private function touchLastMessageToBot(User $user, ?int $telegramUnixDate = null): void
+    {
+        $at = $telegramUnixDate !== null
+            ? Carbon::createFromTimestamp($telegramUnixDate, 'UTC')
+            : Carbon::now();
+        $current = $user->last_message_to_bot_at;
+        if ($current !== null && $current->greaterThanOrEqualTo($at)) {
+            return;
+        }
+        User::query()->whereKey($user->id)->update(['last_message_to_bot_at' => $at]);
+        $user->last_message_to_bot_at = $at;
     }
 
     private function maybeRemindProgressPhoto(User $user, int $chatId): void

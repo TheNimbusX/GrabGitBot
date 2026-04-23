@@ -1252,6 +1252,7 @@
                                 <option value="checks_desc" @selected($filters['sort'] === 'checks_desc')>Чек-инов ↓</option>
                                 <option value="points_week_desc" @selected($filters['sort'] === 'points_week_desc')>Баллов за 7 дн ↓</option>
                                 <option value="last_check_desc" @selected($filters['sort'] === 'last_check_desc')>Последний чек ↓</option>
+                                <option value="last_message_desc" @selected($filters['sort'] === 'last_message_desc')>Сообщение боту ↓</option>
                                 <option value="streak_desc" @selected($filters['sort'] === 'streak_desc')>Серия ↓</option>
                                 <option value="streak_asc" @selected($filters['sort'] === 'streak_asc')>Серия ↑</option>
                             </select>
@@ -1262,7 +1263,7 @@
                         </div>
                     </form>
 
-                    <p class="hint" style="margin-top:0;">На широком экране закреплены «Пульс» и «Имя» — листай вправо для уровня, цифр и дат.</p>
+                    <p class="hint" style="margin-top:0;">На широком экране закреплены «Пульс» и «Имя» — листай вправо для уровня, цифр и дат. «Сообщение боту» — последний входящий апдейт <strong>message</strong> (текст, фото и т.д.); нажатия на inline-кнопки сюда не попадают.</p>
                     <div class="table-users-shell">
                         <table class="responsive table-users">
                             <thead>
@@ -1283,6 +1284,7 @@
                                     <th class="num">Фото</th>
                                     <th class="num">Серия</th>
                                     <th>Последний чек</th>
+                                    <th>Сообщение боту</th>
                                     <th>Ккал / цели</th>
                                     <th class="num">В боте</th>
                                     <th>Создан</th>
@@ -1340,6 +1342,24 @@
                                                             вчера
                                                         @else
                                                             {{ $row['days_since_check'] }} дн. назад
+                                                        @endif
+                                                    </span>
+                                                @endif
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td data-label="Сообщение боту">
+                                            @if ($row['last_message_to_bot'])
+                                                {{ $row['last_message_to_bot']->format('Y-m-d H:i') }}
+                                                @if ($row['days_since_message_to_bot'] !== null)
+                                                    <span class="no" style="font-size:.72rem;display:block;">
+                                                        @if ($row['days_since_message_to_bot'] === 0)
+                                                            сегодня
+                                                        @elseif ($row['days_since_message_to_bot'] === 1)
+                                                            вчера
+                                                        @else
+                                                            {{ $row['days_since_message_to_bot'] }} дн. назад
                                                         @endif
                                                     </span>
                                                 @endif

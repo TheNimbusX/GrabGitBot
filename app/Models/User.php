@@ -45,6 +45,7 @@ class User extends Authenticatable
         'quiet_hours_end',
         'notify_weekly_focus_reminder',
         'notify_weekly_weight_reminder',
+        'last_message_to_bot_at',
         'password',
     ];
 
@@ -65,6 +66,7 @@ class User extends Authenticatable
         'carbs_g' => 'integer',
         'water_goal_ml' => 'integer',
         'next_progress_photo_at' => 'datetime',
+        'last_message_to_bot_at' => 'datetime',
         'notify_morning' => 'boolean',
         'notify_evening' => 'boolean',
         'notify_churn' => 'boolean',
