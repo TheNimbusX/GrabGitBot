@@ -11,6 +11,11 @@ class UserSupportMessage extends Model
         'user_id',
         'telegram_id',
         'body',
+        'read_at',
+    ];
+
+    protected $casts = [
+        'read_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

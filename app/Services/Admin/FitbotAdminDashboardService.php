@@ -167,16 +167,21 @@ class FitbotAdminDashboardService
         $rows = $rows->take(self::TABLE_LIMIT)->values();
 
         $supportTableExists = Schema::hasTable('user_support_messages');
+        $supportHasReadAt = $supportTableExists && Schema::hasColumn('user_support_messages', 'read_at');
         $supportMessages = $supportTableExists
             ? UserSupportMessage::query()
                 ->with(['user:id,first_name,username,telegram_id'])
-                ->latest()
+                ->when($supportHasReadAt, fn ($q) => $q->orderByRaw('read_at is null desc'))
+                ->orderByDesc('id')
                 ->limit(100)
                 ->get()
             : collect();
         $supportMessagesTotal = $supportTableExists
             ? (int) UserSupportMessage::query()->count()
             : 0;
+        $supportUnreadCount = $supportTableExists && $supportHasReadAt
+            ? (int) UserSupportMessage::query()->whereNull('read_at')->count()
+            : null;
 
         return [
             'stats' => $stats,
@@ -190,6 +195,8 @@ class FitbotAdminDashboardService
             'generatedAt' => $now->copy(),
             'supportMessages' => $supportMessages,
             'supportMessagesTotal' => $supportMessagesTotal,
+            'supportUnreadCount' => $supportUnreadCount,
+            'supportHasReadAt' => $supportHasReadAt,
         ];
     }
 

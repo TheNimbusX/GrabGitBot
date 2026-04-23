@@ -36,7 +36,10 @@
             --shadow-card: 0 4px 24px rgba(0, 0, 0, .45), 0 0 0 1px var(--glass-border);
         }
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        html {
+            scroll-behavior: smooth;
+            color-scheme: dark;
+        }
         body {
             margin: 0;
             min-height: 100vh;
@@ -644,6 +647,182 @@
             border-radius: var(--radius-sm);
             border: 1px solid rgba(251, 113, 133, .2);
         }
+        /* Таблица пользователей: горизонтальный скролл + липкие первые колонки на десктопе */
+        .table-users-shell {
+            overflow-x: auto;
+            overflow-y: hidden;
+            border-radius: var(--radius);
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, .28);
+            position: relative;
+            -webkit-overflow-scrolling: touch;
+        }
+        .table-users-shell::-webkit-scrollbar { height: 10px; }
+        .table-users-shell::-webkit-scrollbar-thumb {
+            background: rgba(34, 211, 238, .25);
+            border-radius: 999px;
+        }
+        table.table-users {
+            min-width: 2100px;
+            font-size: .8rem;
+        }
+        table.table-users tbody tr:nth-child(even) td {
+            background: rgba(255, 255, 255, .025);
+        }
+        table.table-users tbody tr:nth-child(even) td.sticky-col--a,
+        table.table-users tbody tr:nth-child(even) td.sticky-col--b {
+            background: rgba(18, 20, 26, 0.98) !important;
+        }
+        table.table-users tbody tr:hover td {
+            background: rgba(34, 211, 238, .07);
+        }
+        table.table-users tbody tr:hover td.sticky-col--a,
+        table.table-users tbody tr:hover td.sticky-col--b {
+            background: rgba(22, 32, 42, 0.99) !important;
+        }
+        .sticky-col--a, .sticky-col--b {
+            position: sticky;
+            z-index: 2;
+            background: rgba(12, 14, 18, .97) !important;
+            box-shadow: 6px 0 20px -6px rgba(0, 0, 0, .65);
+        }
+        thead .sticky-col--a, thead .sticky-col--b {
+            z-index: 4;
+            background: rgba(16, 22, 30, .98) !important;
+        }
+        .sticky-col--a {
+            left: 0;
+            min-width: 11.5rem;
+            max-width: 13rem;
+        }
+        .sticky-col--b {
+            left: 12.5rem;
+            min-width: 10.5rem;
+            max-width: 12rem;
+        }
+        .sticky-col--a .pulse {
+            white-space: normal;
+            max-width: 12rem;
+            line-height: 1.3;
+        }
+        @media (max-width: 1100px) {
+            .sticky-col--a, .sticky-col--b {
+                position: relative !important;
+                left: auto !important;
+                min-width: unset !important;
+                max-width: unset !important;
+                box-shadow: none !important;
+                background: transparent !important;
+            }
+            thead .sticky-col--a, thead .sticky-col--b {
+                background: rgba(34, 211, 238, .06) !important;
+            }
+            table.table-users { min-width: 100%; font-size: .78rem; }
+        }
+        /* Рассылка: тёмные поля (не «белое» системное) */
+        .broadcast-form .field { margin-bottom: 0; }
+        .broadcast-form textarea.msg {
+            width: 100%;
+            min-height: 190px;
+            margin-top: .35rem;
+            background: rgba(5, 7, 10, 0.95) !important;
+            color: #e8edf5 !important;
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 14px;
+            padding: 1.05rem 1.15rem;
+            font-family: var(--mono);
+            font-size: .86rem;
+            line-height: 1.55;
+            caret-color: var(--cyan);
+            resize: vertical;
+            box-shadow: inset 0 2px 16px rgba(0, 0, 0, .4);
+        }
+        .broadcast-form textarea.msg::placeholder {
+            color: rgba(139, 147, 168, 0.75);
+        }
+        .broadcast-form textarea.msg:focus {
+            outline: none;
+            border-color: rgba(34, 211, 238, 0.45);
+            box-shadow: inset 0 2px 16px rgba(0, 0, 0, .4), 0 0 0 3px rgba(34, 211, 238, 0.12);
+        }
+        select.select-tg {
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: rgba(8, 10, 14, 0.95) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--glass-border);
+            padding: 0.62rem 2.6rem 0.62rem 0.95rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.84rem;
+            cursor: pointer;
+            width: 100%;
+            max-width: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='%2322d3ee' viewBox='0 0 16 16'%3E%3Cpath d='M8 12L2 5h12L8 12z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+        }
+        select.select-tg:focus {
+            outline: none;
+            border-color: rgba(34, 211, 238, 0.45);
+            box-shadow: 0 0 0 3px var(--cyan-dim);
+        }
+        select.select-tg option {
+            background: #12151c;
+            color: var(--text);
+        }
+        .support-row--read { opacity: .72; }
+        .support-row--read .support-msg { opacity: .9; }
+        .support-badge {
+            font-family: var(--mono);
+            font-size: .62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            padding: .2rem .45rem;
+            border-radius: 6px;
+        }
+        .support-badge--new {
+            background: var(--cyan-dim);
+            color: var(--cyan);
+            border: 1px solid rgba(34, 211, 238, .3);
+        }
+        .support-badge--done {
+            background: rgba(255, 255, 255, .06);
+            color: var(--text-dim);
+            border: 1px solid var(--glass-border);
+        }
+        .support-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .4rem;
+            align-items: center;
+        }
+        .support-actions form { margin: 0; }
+        .btn-mini {
+            padding: .32rem .55rem;
+            font-size: .68rem;
+            font-weight: 700;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            font-family: var(--font);
+            background: rgba(255, 255, 255, .06);
+            color: var(--text);
+            transition: background .15s, border-color .15s;
+        }
+        .btn-mini:hover { background: rgba(255, 255, 255, .1); }
+        .btn-mini--primary {
+            background: var(--cyan-dim);
+            border-color: rgba(34, 211, 238, .35);
+            color: var(--cyan);
+        }
+        .btn-mini--danger {
+            background: var(--rose-dim);
+            border-color: rgba(251, 113, 133, .35);
+            color: var(--rose);
+        }
         .mobile-nav {
             display: none;
             position: sticky;
@@ -855,7 +1034,16 @@
                         <div class="mk-ic">✉️</div>
                         <strong>{{ $supportMessagesTotal }}</strong>
                         <div class="mk-label">обращения</div>
-                        <div class="mk-sub"><a href="#support" style="color:var(--cyan);text-decoration:none;font-weight:700;">открыть раздел ↓</a></div>
+                        <div class="mk-sub">
+                            @if ($supportUnreadCount !== null && $supportUnreadCount > 0)
+                                <span style="color:var(--cyan);font-weight:700;">непрочитано: {{ $supportUnreadCount }}</span>
+                            @elseif ($supportUnreadCount !== null)
+                                все обработаны
+                            @else
+                                <span class="no">миграция <code style="font-family:var(--mono);font-size:.9em;">read_at</code> — см. раздел поддержки</span>
+                            @endif
+                            · <a href="#support" style="color:var(--cyan);text-decoration:none;font-weight:700;">открыть ↓</a>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -919,12 +1107,12 @@
                         </div>
                     @endif
 
-                    <form method="post" action="{{ route('admin.broadcast.preview') }}" style="margin-top:1rem;">
+                    <form method="post" action="{{ route('admin.broadcast.preview') }}" class="broadcast-form" style="margin-top:1rem;">
                         @csrf
-                        <div class="toolbar" style="margin-bottom:.65rem;">
-                            <div class="field" style="flex:1;min-width:240px;">
-                                <label for="seg">Сегмент</label>
-                                <select id="seg" name="segment">
+                        <div class="toolbar" style="margin-bottom:.85rem;">
+                            <div class="field" style="flex:1;min-width:min(100%,320px);max-width:100%;">
+                                <label for="seg">Сегмент аудитории</label>
+                                <select id="seg" name="segment" class="select-tg">
                                     @foreach ($segmentLabels as $sid => $slabel)
                                         <option value="{{ $sid }}" @selected(old('segment', is_array($broadcastPending) ? $broadcastPending['segment'] : 'all_completed') === $sid)>{{ $slabel }}</option>
                                     @endforeach
@@ -932,10 +1120,10 @@
                             </div>
                         </div>
                         <div class="field">
-                            <label for="msg">Текст</label>
-                            <textarea id="msg" class="msg" name="message" rows="6" required placeholder="Текст для Telegram…">{{ old('message', is_array($broadcastPending) ? $broadcastPending['message'] : '') }}</textarea>
+                            <label for="msg">Текст рассылки</label>
+                            <textarea id="msg" class="msg" name="message" rows="8" required placeholder="Пиши сюда текст как в Telegram (без HTML)…">{{ old('message', is_array($broadcastPending) ? $broadcastPending['message'] : '') }}</textarea>
                         </div>
-                        <button type="submit" class="btn" style="margin-top:.75rem;">Показать получателей</button>
+                        <button type="submit" class="btn" style="margin-top:.85rem;">Показать получателей</button>
                     </form>
                 </div>
             </section>
@@ -943,29 +1131,54 @@
             <section class="section" id="support">
                 <div class="section-head">
                     <h2><span class="section-idx">04</span> Поддержка</h2>
-                    <span class="hint-inline">{{ $supportMessagesTotal }} записей в базе</span>
+                    <span class="hint-inline">
+                        {{ $supportMessagesTotal }} всего
+                        @if ($supportUnreadCount !== null)
+                            · <strong style="color:var(--cyan);">{{ $supportUnreadCount }}</strong> непрочитано
+                        @endif
+                    </span>
                 </div>
                 <div class="panel">
                     @if ($supportMessages->isEmpty())
                         <p class="hint" style="margin:0;">Пока пусто — ждём первые сообщения из бота.</p>
                     @else
-                        <p class="hint">Свежие сверху (до 100). Удаление пользователя каскадом убирает и обращения.</p>
+                        @if (! $supportHasReadAt)
+                            <p class="hint" style="border:1px dashed var(--amber);padding:.75rem;border-radius:10px;">
+                                Выполни миграцию: <code style="font-family:var(--mono);">php artisan migrate</code> — появятся «прочитано» и сортировка непрочитанных.
+                            </p>
+                        @endif
+                        <p class="hint">Сверху непрочитанные (если колонка есть). До 100 строк.</p>
                         <div class="scroll-table">
-                            <table>
+                            <table class="responsive">
                                 <thead>
                                     <tr>
+                                        <th>Статус</th>
                                         <th>Когда</th>
                                         <th>User</th>
                                         <th>Telegram</th>
                                         <th>Текст</th>
+                                        <th>Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($supportMessages as $sm)
                                         @php($su = $sm->user)
-                                        <tr>
-                                            <td class="no num" style="white-space:nowrap;">{{ $sm->created_at?->format('Y-m-d H:i') }}</td>
-                                            <td class="num">
+                                        @php($isRead = $supportHasReadAt && $sm->read_at !== null)
+                                        <tr class="{{ $isRead ? 'support-row--read' : 'support-row--unread' }}">
+                                            <td data-label="Статус">
+                                                @if ($supportHasReadAt)
+                                                    @if ($isRead)
+                                                        <span class="support-badge support-badge--done">прочитано</span>
+                                                        <div class="no" style="font-size:.65rem;margin-top:.25rem;">{{ $sm->read_at?->format('d.m H:i') }}</div>
+                                                    @else
+                                                        <span class="support-badge support-badge--new">новое</span>
+                                                    @endif
+                                                @else
+                                                    <span class="no">—</span>
+                                                @endif
+                                            </td>
+                                            <td class="no num" style="white-space:nowrap;" data-label="Когда">{{ $sm->created_at?->format('Y-m-d H:i') }}</td>
+                                            <td class="num" data-label="User">
                                                 @if ($su)
                                                     #{{ $su->id }} · {{ $su->first_name ?? '—' }}
                                                     @if ($su->username)
@@ -975,8 +1188,29 @@
                                                     <span class="no">удалён</span>
                                                 @endif
                                             </td>
-                                            <td class="num">{{ $sm->telegram_id }}</td>
-                                            <td><pre class="support-msg">{{ $sm->body }}</pre></td>
+                                            <td class="num" data-label="TG">{{ $sm->telegram_id }}</td>
+                                            <td data-label="Текст"><pre class="support-msg">{{ $sm->body }}</pre></td>
+                                            <td data-label="Действия">
+                                                <div class="support-actions">
+                                                    @if ($supportHasReadAt)
+                                                        @if (! $isRead)
+                                                            <form class="inline" method="post" action="{{ route('admin.support.read', $sm) }}">
+                                                                @csrf
+                                                                <button type="submit" class="btn-mini btn-mini--primary">Прочитано</button>
+                                                            </form>
+                                                        @else
+                                                            <form class="inline" method="post" action="{{ route('admin.support.unread', $sm) }}">
+                                                                @csrf
+                                                                <button type="submit" class="btn-mini">Не новое</button>
+                                                            </form>
+                                                        @endif
+                                                    @endif
+                                                    <form class="inline" method="post" action="{{ route('admin.support.destroy', $sm) }}" onsubmit="return confirm('Удалить обращение навсегда?');">
+                                                        @csrf
+                                                        <button type="submit" class="btn-mini btn-mini--danger">Удалить</button>
+                                                    </form>
+                                                </div>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>
@@ -999,7 +1233,7 @@
                         </div>
                         <div class="field">
                             <label for="filter">Срез</label>
-                            <select id="filter" name="filter">
+                            <select id="filter" name="filter" class="select-tg">
                                 <option value="all" @selected($filters['filter'] === 'all')>Все</option>
                                 <option value="completed" @selected($filters['filter'] === 'completed')>Онбординг готов</option>
                                 <option value="onboarding" @selected($filters['filter'] === 'onboarding')>В онбординге</option>
@@ -1013,7 +1247,7 @@
                         </div>
                         <div class="field">
                             <label for="sort">Сортировка</label>
-                            <select id="sort" name="sort">
+                            <select id="sort" name="sort" class="select-tg">
                                 <option value="id_desc" @selected($filters['sort'] === 'id_desc')>ID ↓</option>
                                 <option value="created_asc" @selected($filters['sort'] === 'created_asc')>Регистрация ↑</option>
                                 <option value="checks_desc" @selected($filters['sort'] === 'checks_desc')>Чек-инов ↓</option>
@@ -1029,12 +1263,13 @@
                         </div>
                     </form>
 
-                    <div class="scroll-table">
-                        <table class="responsive">
+                    <p class="hint" style="margin-top:0;">На широком экране закреплены колонки «Пульс» и «Уровень» — листай вправо для цифр и дат.</p>
+                    <div class="table-users-shell">
+                        <table class="responsive table-users">
                             <thead>
                                 <tr>
-                                    <th>Пульс</th>
-                                    <th>Уровень</th>
+                                    <th class="sticky-col--a">Пульс</th>
+                                    <th class="sticky-col--b">Уровень</th>
                                     <th>ID</th>
                                     <th>Telegram</th>
                                     <th>Имя</th>
@@ -1061,13 +1296,13 @@
                                     @php($pulse = $row['pulse'])
                                     @php($tier = $row['strike_tier'])
                                     <tr>
-                                        <td data-label="Пульс">
+                                        <td class="sticky-col--a" data-label="Пульс">
                                             <span class="pulse pulse-{{ $pulse }}"><span class="pulse-dot"></span>{{ $pulseLabels[$pulse] ?? $pulse }}</span>
                                             @if ($row['onboarding_hint'])
                                                 <div class="no" style="font-size:.72rem;margin-top:.25rem;">{{ $row['onboarding_hint'] }}</div>
                                             @endif
                                         </td>
-                                        <td data-label="Уровень" class="tier-cell">
+                                        <td class="sticky-col--b tier-cell" data-label="Уровень">
                                             <span class="e">{{ $tier->emoji() }}</span><b>{{ $tier->labelRu() }}</b>
                                             <div class="no" style="font-size:.7rem;margin-top:.2rem;">серия {{ $row['streak'] }} · {{ $tier->criteriaRu() }}</div>
                                         </td>

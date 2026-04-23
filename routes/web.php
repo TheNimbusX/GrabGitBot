@@ -19,6 +19,9 @@ Route::prefix('admin')->group(function () {
         Route::post('broadcast/confirm', [FitbotAdminController::class, 'broadcastConfirm'])->name('admin.broadcast.confirm');
         Route::post('broadcast/cancel', [FitbotAdminController::class, 'broadcastCancel'])->name('admin.broadcast.cancel');
         Route::post('users/{user}/delete', [FitbotAdminController::class, 'destroyUser'])->name('admin.user.destroy');
+        Route::post('support/{supportMessage}/read', [FitbotAdminController::class, 'markSupportRead'])->name('admin.support.read');
+        Route::post('support/{supportMessage}/unread', [FitbotAdminController::class, 'markSupportUnread'])->name('admin.support.unread');
+        Route::post('support/{supportMessage}/delete', [FitbotAdminController::class, 'destroySupportMessage'])->name('admin.support.destroy');
         Route::post('logout', [FitbotAdminController::class, 'logout'])->name('admin.logout');
     });
 });

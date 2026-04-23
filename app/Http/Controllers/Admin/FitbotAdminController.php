@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\UserPlanMode;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserSupportMessage;
 use App\Services\Admin\FitbotAdminDashboardService;
 use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
@@ -273,5 +274,28 @@ class FitbotAdminController extends Controller
         $user->delete();
 
         return back()->with('admin_status', "Пользователь {$label} (telegram {$telegramId}) удалён; сообщения бота в чате очищены насколько позволяет Telegram.");
+    }
+
+    public function markSupportRead(UserSupportMessage $supportMessage): RedirectResponse
+    {
+        $supportMessage->read_at = now();
+        $supportMessage->save();
+
+        return back()->with('admin_status', 'Обращение отмечено как прочитанное.');
+    }
+
+    public function markSupportUnread(UserSupportMessage $supportMessage): RedirectResponse
+    {
+        $supportMessage->read_at = null;
+        $supportMessage->save();
+
+        return back()->with('admin_status', 'Обращение снова в списке непрочитанных.');
+    }
+
+    public function destroySupportMessage(UserSupportMessage $supportMessage): RedirectResponse
+    {
+        $supportMessage->delete();
+
+        return back()->with('admin_status', 'Обращение удалено.');
     }
 }
