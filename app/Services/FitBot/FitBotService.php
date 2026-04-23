@@ -95,7 +95,7 @@ class FitBotService
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /settings',
+                    FitBotMessaging::unknownCommand(),
                     $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
                 ),
             };
@@ -117,7 +117,7 @@ class FitBotService
                 $user->save();
                 $this->telegram->sendMessage(
                     $chatId,
-                    'Записал <b>фокус недели</b> — строка в конце <b>/rating</b> и после чек-ина.',
+                    FitBotMessaging::weeklyFocusSavedAfterText(),
                     $this->mainMenuKeyboard()
                 );
 
@@ -136,7 +136,7 @@ class FitBotService
                     'analytics' => $this->cmdExtendedAnalytics($user, $chatId),
                     'plan_ai' => $this->telegram->sendMessage(
                         $chatId,
-                        '💎 <b>PRO / AI-тренировки</b> — позже, с оплатой. Сейчас пользуйся планом и чек-инами бесплатно.',
+                        FitBotMessaging::proAiMenuHint(),
                         $this->mainMenuKeyboard()
                     ),
                 };
@@ -180,7 +180,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                '👇 Кнопки внизу или команды: /check, /cancel, /rating, /plan, /analytics, /settings',
+                FitBotMessaging::mainMenuFallback(),
                 $this->mainMenuKeyboard()
             );
         }
@@ -240,9 +240,7 @@ class FitBotService
         if ($data === 'pay:ai') {
             $this->telegram->sendMessage(
                 $chatId,
-                '💎 <b>PRO</b> (когда подключим): AI-тренировки под твой уровень и цель, режим давления, серии, коллажи прогресса, аналитика.'
-                ."\n\n"
-                .'Сейчас всё основное уже в бесплатной версии — продолжай чек-ины и план.',
+                FitBotMessaging::proAiCallbackHint(),
                 $this->mainMenuKeyboard()
             );
 
@@ -267,7 +265,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                '👋 Снова привет! Я <b>FitBot</b> — держим питание 😋, сон 😴, тренировки 💪 и воду 💧 под контролем.',
+                FitBotMessaging::startWelcomeBack(),
                 $this->mainMenuKeyboard()
             );
 
@@ -281,12 +279,12 @@ class FitBotService
             OnboardingStep::AskAge => $this->sendOnboardingAgePrompt($user, $chatId),
             OnboardingStep::AskWeight => $this->telegram->sendMessage(
                 $chatId,
-                'Введи <b>вес в кг</b> (например 75.5).',
+                FitBotMessaging::onboardingWeightPrompt(),
                 $this->onboardingTextPromptKeyboard()
             ),
             OnboardingStep::AskHeight => $this->telegram->sendMessage(
                 $chatId,
-                'Введи <b>рост в см</b> (например 180).',
+                FitBotMessaging::onboardingHeightPrompt(),
                 $this->onboardingTextPromptKeyboard()
             ),
             OnboardingStep::AskActivity => $this->askActivity($chatId),
@@ -295,25 +293,25 @@ class FitBotService
             OnboardingStep::AskSleep => $this->sendOnboardingSleepPrompt($user, $chatId),
             OnboardingStep::AskWaterGoal => $this->telegram->sendMessage(
                 $chatId,
-                '💧 Сколько <b>мл воды в день</b> для твоей цели? (например <b>2500</b> или <b>2.5 л</b>) — от этого считается балл за воду в /check.',
+                FitBotMessaging::onboardingWaterGoalPrompt(),
                 $this->onboardingTextPromptKeyboard()
             ),
             OnboardingStep::AskBeforePhoto => $this->telegram->sendMessage(
                 $chatId,
-                'Пришли фото «до» или нажми «Пропустить».',
+                FitBotMessaging::onboardingPhotoPrompt(),
                 $this->telegram->inlineKeyboard([
                     [['text' => 'Пропустить фото', 'callback_data' => 'onb:photo:skip']],
                     [['text' => '◀️ Назад', 'callback_data' => 'onb:back']],
                 ])
             ),
-            default => $this->telegram->sendMessage($chatId, 'Продолжим настройку — следуй подсказкам выше.'),
+            default => $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingContinueHint()),
         };
     }
 
     private function cmdCheck(User $user, int $chatId): void
     {
         if (! $user->hasCompletedOnboarding()) {
-            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
 
             return;
         }
@@ -328,7 +326,7 @@ class FitBotService
         if ($existing && $existing->is_completed) {
             $this->telegram->sendMessage(
                 $chatId,
-                'Сегодняшний чек-ин уже заполнен. Завтра снова жду /check',
+                FitBotMessaging::checkAlreadyDoneToday(),
                 $this->mainMenuKeyboard()
             );
 
@@ -351,7 +349,7 @@ class FitBotService
     private function cmdRating(User $user, int $chatId): void
     {
         if (! $user->hasCompletedOnboarding()) {
-            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
 
             return;
         }
@@ -363,7 +361,7 @@ class FitBotService
     private function cmdExtendedAnalytics(User $user, int $chatId): void
     {
         if (! $user->hasCompletedOnboarding()) {
-            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
 
             return;
         }
@@ -375,7 +373,7 @@ class FitBotService
     private function cmdPlan(User $user, int $chatId): void
     {
         if (! $user->hasCompletedOnboarding()) {
-            $this->telegram->sendMessage($chatId, '⏳ Сначала заверши онбординг: /start');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdPlanNeedOnboarding());
 
             return;
         }
@@ -385,12 +383,9 @@ class FitBotService
 
     private function cmdSettings(User $user, int $chatId): void
     {
-        // Без HTML: иначе при ошибке разбора сущностей Telegram отвечает ok=false при HTTP 200 — сообщение не уходит.
         $this->telegram->sendMessage(
             $chatId,
-            "⚙️ <b>Настройки</b>\n\n"
-            ."✏️ <b>Сменить анкету</b> — заново пройти вопросы (пол, возраст, вес…). История чек-инов сохранится, цели пересчитаются после завершения.\n\n"
-            .'🗑 <b>Удалить аккаунт</b> — сотрутся все чек-ины, фото и цели. Потом снова /start.',
+            FitBotMessaging::settingsIntro(),
             $this->settingsMenuKeyboard()
         );
     }
@@ -399,7 +394,7 @@ class FitBotService
     private function cmdCancelCheck(User $user, int $chatId): void
     {
         if (! $user->hasCompletedOnboarding()) {
-            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
 
             return;
         }
@@ -410,7 +405,7 @@ class FitBotService
 
         $this->telegram->sendMessage(
             $chatId,
-            'Незавершённого чек-ина за сегодня нет. Открыть заново: <b>/check</b>.',
+            FitBotMessaging::checkNoDraftToday(),
             $this->mainMenuKeyboard()
         );
     }
@@ -463,9 +458,7 @@ class FitBotService
         $check->delete();
         $this->telegram->sendMessage(
             $chatId,
-            '❌ <b>Чек-ин отменён.</b>'."\n\n"
-            .'Начать снова: кнопка <b>Чек-ин</b> или <b>/check</b>.'."\n"
-            .'<i>/cancel</i> всегда сбрасывает незавершённый чек за сегодня.',
+            FitBotMessaging::checkCancelled(),
             $this->mainMenuKeyboard()
         );
 
@@ -485,7 +478,7 @@ class FitBotService
         return $this->telegram->inlineKeyboard([
             [['text' => '✏️ Сменить анкету', 'callback_data' => 'set:edit']],
             [['text' => '🔔 Уведомления', 'callback_data' => 'set:notif:menu']],
-            [['text' => '📌 Фокус недели', 'callback_data' => 'set:focus:ask']],
+            [['text' => '📌 Фокус недели', 'callback_data' => 'set:focus:menu']],
             [['text' => '🗑 Удалить аккаунт', 'callback_data' => 'set:del:s']],
             [['text' => '🏠 В главное меню', 'callback_data' => 'set:home']],
         ]);
@@ -494,6 +487,31 @@ class FitBotService
     private function weeklyFocusPromptCacheKey(int $telegramId): string
     {
         return 'fitbot:weekly_focus_prompt:'.$telegramId;
+    }
+
+    /** @return array<string, mixed> */
+    private function weeklyFocusMenuKeyboard(): array
+    {
+        $rows = [];
+        $row = [];
+        foreach (FitBotMessaging::weeklyFocusPresetNotes() as $id => $_) {
+            $row[] = [
+                'text' => FitBotMessaging::weeklyFocusPresetButtonLabel($id),
+                'callback_data' => 'set:focus:p:'.$id,
+            ];
+            if (count($row) >= 2) {
+                $rows[] = $row;
+                $row = [];
+            }
+        }
+        if ($row !== []) {
+            $rows[] = $row;
+        }
+        $rows[] = [['text' => '✏️ Свой текст', 'callback_data' => 'set:focus:ask']];
+        $rows[] = [['text' => '🗑 Сбросить фокус', 'callback_data' => 'set:focus:clear']];
+        $rows[] = [['text' => '◀️ В настройки', 'callback_data' => 'set:focus:close']];
+
+        return $this->telegram->inlineKeyboard($rows);
     }
 
     private function onboardingTextPromptKeyboard(): array
@@ -506,16 +524,16 @@ class FitBotService
     private function sendOnboardingAgePrompt(User $user, int $chatId): void
     {
         $agePrompt = $user->isDisciplineOnlyMode()
-            ? 'Сколько тебе <b>полных лет</b>? Напиши число (например 27).'
-            : 'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.';
+            ? FitBotMessaging::onboardingAgePromptDiscipline()
+            : FitBotMessaging::onboardingAgePromptFull();
         $this->telegram->sendMessage($chatId, $agePrompt, $this->onboardingTextPromptKeyboard());
     }
 
     private function sendOnboardingSleepPrompt(User $user, int $chatId): void
     {
         $t = $user->isDisciplineOnlyMode()
-            ? 'Сколько часов <b>сна в сутки</b> хочешь держать в цель? Введи число (например <b>7.5</b>) — для чек-ина.'
-            : 'Сколько часов сна в цель? Введи число (например <b>7.5</b>).';
+            ? FitBotMessaging::onboardingSleepTargetDiscipline()
+            : FitBotMessaging::onboardingSleepTargetFull();
         $this->telegram->sendMessage($chatId, $t, $this->onboardingTextPromptKeyboard());
     }
 
@@ -525,7 +543,7 @@ class FitBotService
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             $this->telegram->sendMessage(
                 $chatId,
-                'Ок, ниже снова основные кнопки. Незавершённый чек-ин за сегодня можно сбросить: <b>/cancel</b>.',
+                FitBotMessaging::settingsHomeHint(),
                 $this->mainMenuKeyboard()
             );
 
@@ -537,7 +555,7 @@ class FitBotService
             $this->resetProfileForReonboarding($user);
             $this->telegram->sendMessage(
                 $chatId,
-                'Ок, начинаем заново: снова описание бота и выбор режима. История чек-инов остаётся; для режима «план FitBot» после анкеты снова пересчитаю калории и БЖУ.',
+                FitBotMessaging::settingsReonboardingStart(),
                 $this->telegram->replyKeyboardRemove(),
                 null
             );
@@ -548,7 +566,7 @@ class FitBotService
 
         if ($data === 'set:del:n') {
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
-            $this->telegram->sendMessage($chatId, 'Удаление отменено.', $this->settingsMenuKeyboard());
+            $this->telegram->sendMessage($chatId, FitBotMessaging::settingsDeleteCancelled(), $this->settingsMenuKeyboard());
 
             return;
         }
@@ -576,7 +594,7 @@ class FitBotService
             if ($step === null) {
                 $this->telegram->sendMessage(
                     $chatId,
-                    'Сессия подтверждения истекла или не начата. Нажми «Удалить аккаунт» в /settings ещё раз.',
+                    FitBotMessaging::settingsDeleteSessionExpired(),
                     $this->settingsMenuKeyboard()
                 );
 
@@ -622,7 +640,7 @@ class FitBotService
                 $this->telegram->deleteRecordedOutboundMessagesForUser($user);
                 $this->telegram->sendMessage(
                     $chatId,
-                    'Аккаунт удалён. Чтобы начать с чистого листа, отправь /start.'
+                    FitBotMessaging::settingsDeleteFinal()
                 );
                 $user->delete();
 
@@ -630,14 +648,66 @@ class FitBotService
             }
         }
 
+        if ($data === 'set:focus:menu') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weeklyFocusMenuTitle(),
+                $this->weeklyFocusMenuKeyboard()
+            );
+
+            return;
+        }
+
+        if ($data === 'set:focus:close') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::settingsIntro(),
+                $this->settingsMenuKeyboard()
+            );
+
+            return;
+        }
+
+        if ($data === 'set:focus:clear') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $user->weekly_focus_note = null;
+            $user->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weeklyFocusCleared(),
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
+        if (str_starts_with($data, 'set:focus:p:')) {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $id = substr($data, strlen('set:focus:p:'));
+            $map = FitBotMessaging::weeklyFocusPresetNotes();
+            if (! isset($map[$id])) {
+                return;
+            }
+            $user->weekly_focus_note = Str::limit($map[$id], 255);
+            $user->save();
+            $label = FitBotMessaging::weeklyFocusPresetButtonLabel($id);
+            $this->telegram->sendMessage(
+                $chatId,
+                FitBotMessaging::weeklyFocusPresetApplied($label),
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
         if ($data === 'set:focus:ask') {
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             Cache::put($this->weeklyFocusPromptCacheKey($user->telegram_id), 1, now()->addMinutes(20));
             $this->telegram->sendMessage(
                 $chatId,
-                '📌 <b>Фокус недели</b>'."\n\n"
-                .'Напиши <b>одну короткую строку</b> (до 255 символов), что важно на эту неделю. Пример: «меньше сладкого», «8 ч сна», «3 тренировки».'."\n\n"
-                .'<i>Отмена — просто открой другое меню или подожди 20 мин.</i>'
+                FitBotMessaging::weeklyFocusAskCustom()
             );
 
             return;
@@ -653,7 +723,7 @@ class FitBotService
         if ($data === 'set:notif:back') {
             $this->telegram->sendMessage(
                 $chatId,
-                '⚙️ <b>Настройки</b>',
+                FitBotMessaging::settingsTitleShort(),
                 $this->settingsMenuKeyboard()
             );
 
@@ -670,6 +740,8 @@ class FitBotService
                 $user->notify_churn = ! (bool) $user->notify_churn;
             } elseif ($field === 'quiet') {
                 $user->notify_quiet_enabled = ! (bool) $user->notify_quiet_enabled;
+            } elseif ($field === 'weekly_focus') {
+                $user->notify_weekly_focus_reminder = ! (bool) $user->notify_weekly_focus_reminder;
             }
             $user->save();
             $this->sendNotificationsSettingsPanel($user, $chatId, $editMessageId);
@@ -700,21 +772,22 @@ class FitBotService
     private function sendNotificationsSettingsPanel(User $user, int $chatId, ?int $editMessageId): void
     {
         $user->refresh();
-        $on = fn (bool $v) => $v ? '✅' : '⛔️';
-        $text = '🔔 <b>Уведомления</b>'."\n\n"
-            .'Что включено:'."\n"
-            .$on((bool) $user->notify_morning).' Утро (мотивация по расписанию)'."\n"
-            .$on((bool) $user->notify_evening).' Вечер (напоминание про чек-ин)'."\n"
-            .$on((bool) $user->notify_churn).' Возврат после паузы'."\n"
-            .$on((bool) $user->notify_quiet_enabled).' Тихие часы: не беспокоить'."\n\n"
-            .'Окно тишины: <b>'.e((string) $user->quiet_hours_start).' — '.e((string) $user->quiet_hours_end).'</b> (локаль сервера)'."\n\n"
-            .'<i>Пресеты меняют только интервал «не беспокоить».</i>';
+        $text = FitBotMessaging::notificationsPanelText([
+            'morning' => (bool) $user->notify_morning,
+            'evening' => (bool) $user->notify_evening,
+            'churn' => (bool) $user->notify_churn,
+            'weekly_focus' => (bool) $user->notify_weekly_focus_reminder,
+            'quiet' => (bool) $user->notify_quiet_enabled,
+        ], (string) $user->quiet_hours_start, (string) $user->quiet_hours_end);
 
         $markup = $this->telegram->inlineKeyboard([
             [
                 ['text' => 'Утро', 'callback_data' => 'set:notif:toggle:morning'],
                 ['text' => 'Вечер', 'callback_data' => 'set:notif:toggle:evening'],
                 ['text' => 'Паузы', 'callback_data' => 'set:notif:toggle:churn'],
+            ],
+            [
+                ['text' => 'Фокус (раз в нед.)', 'callback_data' => 'set:notif:toggle:weekly_focus'],
             ],
             [
                 ['text' => 'Тихие часы вкл/выкл', 'callback_data' => 'set:notif:toggle:quiet'],
@@ -869,7 +942,7 @@ class FitBotService
         match ($step) {
             OnboardingStep::AskWelcome, OnboardingStep::AskPlanChoice => $this->telegram->sendMessage(
                 $chatId,
-                '👆 Чтобы продолжить, нажми кнопку под предыдущим сообщением.'
+                FitBotMessaging::onboardingNeedButton()
             ),
             OnboardingStep::AskAge => $this->onboardingAge($user, $chatId, $text),
             OnboardingStep::AskWeight => $this->onboardingWeight($user, $chatId, $text),
@@ -884,7 +957,7 @@ class FitBotService
     {
         $w = $this->parseFloat($text);
         if ($w === null || $w < 30 || $w > 300) {
-            $this->telegram->sendMessage($chatId, 'Нужно реалистичное значение веса в кг (30–300). Попробуй ещё раз.');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingWeightInvalid());
 
             return;
         }
@@ -893,7 +966,7 @@ class FitBotService
         $user->save();
         $this->telegram->sendMessage(
             $chatId,
-            'Отлично. Теперь <b>рост в см</b> (например 180).',
+            FitBotMessaging::onboardingAfterWeight(),
             $this->onboardingTextPromptKeyboard()
         );
     }
@@ -902,7 +975,7 @@ class FitBotService
     {
         $age = $this->parseInt($text);
         if ($age === null || $age < 14 || $age > 100) {
-            $this->telegram->sendMessage($chatId, 'Укажи возраст числом <b>от 14 до 100</b> лет.');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingAgeInvalid());
 
             return;
         }
@@ -911,7 +984,7 @@ class FitBotService
         $user->save();
         $this->telegram->sendMessage(
             $chatId,
-            'Принято. Теперь <b>вес в кг</b> (например 75.5).',
+            FitBotMessaging::onboardingAfterAge(),
             $this->onboardingTextPromptKeyboard()
         );
     }
@@ -920,7 +993,7 @@ class FitBotService
     {
         $h = $this->parseInt($text);
         if ($h === null || $h < 120 || $h > 230) {
-            $this->telegram->sendMessage($chatId, 'Укажи рост в см целым числом (120–230).');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingHeightInvalid());
 
             return;
         }
@@ -941,7 +1014,7 @@ class FitBotService
     {
         $s = $this->parseFloat($text);
         if ($s === null || $s < 4 || $s > 12) {
-            $this->telegram->sendMessage($chatId, 'Введи часы сна числом (например 7.5), обычно 4–12.');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingSleepInvalid());
 
             return;
         }
@@ -951,7 +1024,7 @@ class FitBotService
             $user->save();
             $this->telegram->sendMessage(
                 $chatId,
-                '💧 Сколько <b>мл воды в день</b> для твоей цели? (например <b>2500</b> или <b>2.5 л</b>) — от этого считается балл за воду в /check.',
+                FitBotMessaging::onboardingWaterGoalPrompt(),
                 $this->onboardingTextPromptKeyboard()
             );
 
@@ -961,7 +1034,7 @@ class FitBotService
         $user->save();
         $this->telegram->sendMessage(
             $chatId,
-            'Загрузи фото «до» (одно сообщение с фото) или нажми «Пропустить».',
+            FitBotMessaging::onboardingPhotoPromptFull(),
             $this->telegram->inlineKeyboard([
                 [['text' => 'Пропустить фото', 'callback_data' => 'onb:photo:skip']],
                 [['text' => '◀️ Назад', 'callback_data' => 'onb:back']],
@@ -975,7 +1048,7 @@ class FitBotService
         if ($ml === null || $ml < 400 || $ml > 12000) {
             $this->telegram->sendMessage(
                 $chatId,
-                '💧 Укажи объём в мл или литрах (например 2500 или 2 л), в диапазоне примерно 400–12000 мл.'
+                FitBotMessaging::onboardingWaterInvalid()
             );
 
             return;
@@ -989,7 +1062,7 @@ class FitBotService
     {
         $step = $user->onboardingStepEnum();
         if ($step === null || $step === OnboardingStep::AskWelcome) {
-            $this->telegram->sendMessage($chatId, 'Это первый шаг — назад некуда.');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingFirstStepNoBack());
 
             return;
         }
@@ -1039,7 +1112,7 @@ class FitBotService
             $user->save();
             $this->telegram->sendMessage(
                 $chatId,
-                'Введи <b>вес в кг</b> (например 75.5).',
+                FitBotMessaging::onboardingWeightPrompt(),
                 $this->onboardingTextPromptKeyboard()
             );
 
@@ -1053,7 +1126,7 @@ class FitBotService
             $user->save();
             $this->telegram->sendMessage(
                 $chatId,
-                'Введи <b>рост в см</b> (например 180).',
+                FitBotMessaging::onboardingHeightPrompt(),
                 $this->onboardingTextPromptKeyboard()
             );
 
@@ -1088,7 +1161,7 @@ class FitBotService
                 $user->save();
                 $this->telegram->sendMessage(
                     $chatId,
-                    'Введи <b>рост в см</b> (например 180).',
+                    FitBotMessaging::onboardingHeightPrompt(),
                     $this->onboardingTextPromptKeyboard()
                 );
             } else {
@@ -1137,25 +1210,16 @@ class FitBotService
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
         $this->telegram->sendMessage(
             $chatId,
-            '🎉 <b>Готово!</b> Режим без плана FitBot: каждый день <b>/check</b> ✍️, статистика <b>/rating</b> 📊. Калории и меню ведёшь сам — я помогаю не сбиться с дисциплины.'
-            ."\n".'Раз в ~30 дней могу напомнить про фото прогресса 📷',
+            FitBotMessaging::disciplineDoneFooter(),
             $this->mainMenuKeyboard()
         );
     }
 
     private function sendWelcomeScreen(int $chatId): void
     {
-        $text = "👋 <b>Привет! Я FitBot</b>\n\n"
-            ."Я помогаю не терять нить дисциплины:\n"
-            ."• 📝 <b>Чек-ин</b> — питание, сон, движение, вода за день (с баллами)\n"
-            ."• 📊 <b>Рейтинг</b> — серия дней и подсказки\n"
-            ."• 📋 <b>План</b> — твои цели по сну и воде (или полный план от меня)\n"
-            ."• ⏰ Напоминания утром и вечером\n\n"
-            .'Нажми <b>«Продолжить»</b>, чтобы выбрать режим и пройти короткую настройку.';
-
         $this->telegram->sendMessage(
             $chatId,
-            $text,
+            FitBotMessaging::welcomeScreenText(),
             $this->telegram->inlineKeyboard([
                 [['text' => '▶️ Продолжить', 'callback_data' => 'onb:welcome:continue']],
             ])
@@ -1166,9 +1230,7 @@ class FitBotService
     {
         $this->telegram->sendMessage(
             $chatId,
-            '🎯 <b>Какой режим тебе подходит?</b>'."\n\n"
-            .'• <b>План от FitBot</b> — рассчитаю калории, БЖУ, пример дня и блок про тренировки (дольше анкета).'."\n"
-            .'• <b>Свой план</b> — только чек-ины и дисциплина: спрошу сон, воду и базовые данные, без меню и ккал от меня.',
+            FitBotMessaging::planChoiceText(),
             $this->telegram->inlineKeyboard([
                 [['text' => '📊 План от FitBot', 'callback_data' => 'onb:plan:'.UserPlanMode::Full->value]],
                 [['text' => '✅ Свой план — только дисциплина', 'callback_data' => 'onb:plan:'.UserPlanMode::Discipline->value]],
@@ -1180,8 +1242,8 @@ class FitBotService
     private function askGender(User $user, int $chatId): void
     {
         $intro = $user->isDisciplineOnlyMode()
-            ? 'Начнём с <b>пола</b> — так подсказки будут точнее.'
-            : 'Начнём с <b>пола</b> — от него зависят расчёт калорий, БЖУ и пример тренировок.';
+            ? FitBotMessaging::onboardingGenderIntroDiscipline()
+            : FitBotMessaging::onboardingGenderIntroFull();
 
         $this->telegram->sendMessage(
             $chatId,
@@ -1198,7 +1260,7 @@ class FitBotService
 
     private function askActivity(int $chatId): void
     {
-        $lines = ['Какая у тебя <b>повседневная активность</b>? Это влияет на калории.', ''];
+        $lines = [FitBotMessaging::onboardingActivityIntro(), ''];
         foreach (ActivityLevel::cases() as $a) {
             $lines[] = '• <b>'.$a->labelRu().'</b> — '.$a->descriptionRu();
         }
@@ -1223,7 +1285,7 @@ class FitBotService
         $rows[] = [['text' => '◀️ Назад', 'callback_data' => 'onb:back']];
         $this->telegram->sendMessage(
             $chatId,
-            'Какая <b>цель</b>?',
+            FitBotMessaging::onboardingGoalAsk(),
             $this->telegram->inlineKeyboard($rows)
         );
     }
@@ -1237,7 +1299,7 @@ class FitBotService
         $rows[] = [['text' => '◀️ Назад', 'callback_data' => 'onb:back']];
         $this->telegram->sendMessage(
             $chatId,
-            'Твой <b>опыт</b> тренировок?',
+            FitBotMessaging::onboardingExperienceAsk(),
             $this->telegram->inlineKeyboard($rows)
         );
     }
@@ -1266,8 +1328,7 @@ class FitBotService
         $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingFreeVsProHint());
         $this->telegram->sendMessage(
             $chatId,
-            '🎉 '.FitBotMessaging::onboardingAfterPlanFooter()
-            ."\n\n".'Раз в ~30 дней напомню про фото прогресса 📷',
+            FitBotMessaging::finishFullPlanFooter(),
             $this->mainMenuKeyboard()
         );
     }
@@ -1279,6 +1340,15 @@ class FitBotService
             $cid = (int) ($parts[1] ?? 0);
             if ($cid > 0) {
                 $this->tryCancelIncompleteCheck($user, $chatId, $cid);
+            }
+
+            return;
+        }
+
+        if (count($parts) === 3 && ($parts[2] ?? '') === 'back') {
+            $cid = (int) ($parts[1] ?? 0);
+            if ($cid > 0) {
+                $this->handleCheckStepBack($user, $chatId, $cid);
             }
 
             return;
@@ -1322,6 +1392,45 @@ class FitBotService
         $check->diet_rating = $rating->value;
         $check->save();
         $this->finalizeOrContinueCheck($user, $chatId, $check);
+    }
+
+    private function handleCheckStepBack(User $user, int $chatId, int $checkId): void
+    {
+        $check = DailyCheck::query()
+            ->where('user_id', $user->id)
+            ->whereKey($checkId)
+            ->first();
+        if ($check === null || $check->is_completed) {
+            return;
+        }
+
+        if ($check->workout_rating && ! $check->water_rating) {
+            $check->workout_rating = null;
+            $check->workout_variant = null;
+            $check->save();
+            $this->showCheckProgress($user, $chatId, $check);
+
+            return;
+        }
+
+        if ($check->sleep_rating && ! $check->workout_rating) {
+            $check->sleep_rating = null;
+            $check->sleep_hours_actual = null;
+            $check->save();
+            $this->showCheckProgress($user, $chatId, $check);
+
+            return;
+        }
+
+        if ($check->diet_rating && ! $check->sleep_rating) {
+            $check->diet_rating = null;
+            $check->save();
+            $this->showCheckProgress($user, $chatId, $check);
+
+            return;
+        }
+
+        $this->telegram->sendMessage($chatId, FitBotMessaging::checkCannotStepBack());
     }
 
     private function finalizeOrContinueCheck(User $user, int $chatId, DailyCheck $check): void
@@ -1392,7 +1501,7 @@ class FitBotService
                 $user,
                 $chatId,
                 $check,
-                'Сначала выбери <b>питание</b> кнопками ниже (или <b>/cancel</b>).'
+                FitBotMessaging::checkErrorNeedDietButtons()
             );
 
             return true;
@@ -1407,7 +1516,7 @@ class FitBotService
                 $user,
                 $chatId,
                 $check,
-                'Выбери <b>движение</b> кнопками ниже (или <b>/cancel</b>).'
+                FitBotMessaging::checkErrorNeedWorkoutButtons()
             );
 
             return true;
@@ -1428,7 +1537,7 @@ class FitBotService
                 $user,
                 $chatId,
                 $check,
-                'Напиши часы сна числом от <b>0</b> до <b>16</b> (например <b>7.5</b>).'
+                FitBotMessaging::checkErrorSleepHoursRange()
             );
 
             return true;
@@ -1453,7 +1562,7 @@ class FitBotService
                 $user,
                 $chatId,
                 $check,
-                'Не разобрал объём. Нужно примерно <b>100–20 000</b> мл. Примеры: <code>2000</code>, <code>1.5 л</code>.'
+                FitBotMessaging::checkErrorWaterVolume()
             );
 
             return true;
@@ -1576,32 +1685,23 @@ class FitBotService
     private function checkProgressCurrentQuestionText(User $user, DailyCheck $check): string
     {
         if (! $check->diet_rating) {
-            return '🍽 <b>Питание сегодня?</b> Как получилось держать план?'."\n\n"
-                .'<i>/cancel или кнопка внизу — прервать чек.</i>';
+            return FitBotMessaging::checkQuestionDiet();
         }
 
         if (! $check->sleep_rating) {
             $target = $user->sleep_target_hours ?? 8;
 
-            return '😴 <b>Сон прошлой ночью</b>'."\n\n"
-                .'Сколько часов реально спал? Напиши <b>одно число</b> в чат (например <b>7.5</b>).'."\n"
-                .'🎯 Цель из анкеты: <b>'.$target.'</b> ч.'."\n"
-                .'Диапазон: <b>0–16</b> ч. Можно запятой: <code>7,5</code>'."\n\n"
-                .'<i>Застрял — /cancel или кнопка ниже.</i>';
+            return FitBotMessaging::checkQuestionSleep($target);
         }
 
         if (! $check->workout_rating) {
-            return '💪 <b>Движение сегодня</b>'."\n\n".'<i>Отмена чек-ина — кнопка внизу.</i>';
+            return FitBotMessaging::checkQuestionWorkout();
         }
 
         if (! $check->water_rating) {
             $goal = (int) ($user->water_goal_ml ?? 2500);
 
-            return '💧 <b>Вода за день</b>'."\n\n"
-                .'Сколько примерно выпил? Если не считал — оцени на глаз.'."\n"
-                .'Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'."\n"
-                .'🎯 Цель: <b>'.$goal.'</b> мл · допустимо примерно <b>100–20 000</b> мл'."\n\n"
-                .'<i>/cancel — выйти из чек-ина.</i>';
+            return FitBotMessaging::checkQuestionWater($goal);
         }
 
         return '';
@@ -1614,23 +1714,26 @@ class FitBotService
             return $this->dietRatingKeyboard($id);
         }
         if (! $check->sleep_rating) {
-            return $this->checkCancelMarkup($id);
+            return $this->checkSleepWaterKeyboard($id);
         }
         if (! $check->workout_rating) {
             return $this->workoutVariantKeyboard($id);
         }
         if (! $check->water_rating) {
-            return $this->checkCancelMarkup($id);
+            return $this->checkSleepWaterKeyboard($id);
         }
 
-        return $this->checkCancelMarkup($id);
+        return $this->checkSleepWaterKeyboard($id);
     }
 
-    /** Одна строка inline: отменить незавершённый чек-ин. */
-    private function checkCancelMarkup(int $checkId): array
+    /** Назад на шаг + отмена всего чек-ина. */
+    private function checkSleepWaterKeyboard(int $checkId): array
     {
         return $this->telegram->inlineKeyboard([
-            [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
+            [
+                ['text' => '◀️ Назад', 'callback_data' => 'chk:'.$checkId.':back'],
+                ['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel'],
+            ],
         ]);
     }
 
@@ -1656,6 +1759,7 @@ class FitBotService
             [['text' => '💪 Позанимался', 'callback_data' => $p.WorkoutCheckVariant::Trained->value]],
             [['text' => '😴 День отдыха', 'callback_data' => $p.WorkoutCheckVariant::Rest->value]],
             [['text' => '❌ Прогулял (пропустил тренировку)', 'callback_data' => $p.WorkoutCheckVariant::Skipped->value]],
+            [['text' => '◀️ Назад', 'callback_data' => 'chk:'.$checkId.':back']],
             [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
         ]);
     }
@@ -1716,9 +1820,7 @@ class FitBotService
 
         $this->telegram->sendMessage(
             $chatId,
-            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.'
-            ."\n\n"
-            .'Фото не спорит — даже когда голова ищет отмазку.',
+            FitBotMessaging::progressPhotoReminder(),
             $this->mainMenuKeyboard()
         );
     }
@@ -1736,7 +1838,7 @@ class FitBotService
         $user->save();
         $this->telegram->sendMessage(
             $chatId,
-            'Фото прогресса сохранено. Следующее напоминание через 30 дней.',
+            FitBotMessaging::progressPhotoSaved(),
             $this->mainMenuKeyboard()
         );
     }

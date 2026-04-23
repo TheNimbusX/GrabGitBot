@@ -42,6 +42,7 @@ class User extends Authenticatable
         'notify_quiet_enabled',
         'quiet_hours_start',
         'quiet_hours_end',
+        'notify_weekly_focus_reminder',
         'password',
     ];
 
@@ -65,6 +66,7 @@ class User extends Authenticatable
         'notify_evening' => 'boolean',
         'notify_churn' => 'boolean',
         'notify_quiet_enabled' => 'boolean',
+        'notify_weekly_focus_reminder' => 'boolean',
     ];
 
     public function dailyChecks(): HasMany
@@ -136,6 +138,7 @@ class User extends Authenticatable
             'morning' => (bool) ($this->notify_morning ?? true),
             'evening' => (bool) ($this->notify_evening ?? true),
             'churn' => (bool) ($this->notify_churn ?? true),
+            'weekly_focus' => (bool) ($this->notify_weekly_focus_reminder ?? true),
             default => true,
         };
         if (! $on) {

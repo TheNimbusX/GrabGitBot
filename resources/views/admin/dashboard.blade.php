@@ -204,6 +204,9 @@
     @if (session('broadcast_status'))
         <p class="flash-ok">{{ session('broadcast_status') }}</p>
     @endif
+    @if ($errors->has('broadcast'))
+        <p class="flash-err">{{ $errors->first('broadcast') }}</p>
+    @endif
     @if (session('admin_status'))
         <p class="flash-info">{{ session('admin_status') }}</p>
     @endif
@@ -225,31 +228,66 @@
         @endif
     </div>
 
+    @php
+        $broadcastPending = session('fitbot_broadcast_pending');
+        $segmentLabels = [
+            'all_completed' => 'Онбординг готов — все',
+            'in_onboarding' => 'Застряли в онбординге',
+            'active_7d' => 'Активны 7 дней (был чек-ин)',
+            'inactive_7d' => 'Готовы, но 7+ дней без чек-ина',
+            'inactive_14d' => 'Готовы, но 14+ дней без чек-ина',
+            'new_7d' => 'Новые за 7 дней (любой этап)',
+            'completed_never_checked' => 'Онбординг готов, ни одного чек-ина',
+            'streak_3_plus' => 'Серия чек-инов ≥ 3 дня',
+            'plan_full' => 'Режим плана FitBot',
+            'discipline_only' => 'Только дисциплина (свой план)',
+            'low_activity_14d' => '≤ 1 чек-ин за 14 дней',
+        ];
+    @endphp
+
     <div class="panel" style="max-width:720px;">
         <h2>Рассылка в Telegram</h2>
-        <p class="hint">Без HTML, до ~4090 символов. Сегмент — кому уходит (по умолчанию все с готовым онбордингом).</p>
-        <form method="post" action="{{ url('/admin/broadcast') }}">
+        <p class="hint">Шаг 1: текст и сегмент → <b>Показать получателей</b>. Шаг 2: проверь число и текст → подтверждение. Без HTML, до ~4090 символов.</p>
+
+        @if (is_array($broadcastPending))
+            <div class="flash-info" style="margin-bottom:1rem;">
+                <strong>Предпросмотр</strong><br>
+                Сегмент: <strong>{{ $segmentLabels[$broadcastPending['segment']] ?? $broadcastPending['segment'] }}</strong><br>
+                Получателей: <strong class="num">{{ $broadcastPending['recipient_count'] }}</strong>
+                <pre style="white-space:pre-wrap;margin:.5rem 0 0;font-size:.85rem;background:var(--surface2);padding:.6rem;border-radius:8px;border:1px solid var(--border);">{{ $broadcastPending['message'] }}</pre>
+                <form method="post" action="{{ route('admin.broadcast.confirm') }}" style="margin-top:.75rem;">
+                    @csrf
+                    <input type="hidden" name="message" value="{{ $broadcastPending['message'] }}">
+                    <input type="hidden" name="segment" value="{{ $broadcastPending['segment'] }}">
+                    <label style="display:flex;gap:.4rem;align-items:flex-start;margin:.35rem 0;">
+                        <input type="checkbox" name="confirm_broadcast" value="1" required>
+                        <span>Отправить ровно <strong>{{ $broadcastPending['recipient_count'] }}</strong> пользователям (текст и сегмент как выше)</span>
+                    </label>
+                    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem;">
+                        <button type="submit">Подтвердить отправку</button>
+                    </div>
+                </form>
+                <form method="post" action="{{ route('admin.broadcast.cancel') }}" style="margin-top:.5rem;">
+                    @csrf
+                    <button type="submit" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Отменить черновик</button>
+                </form>
+            </div>
+        @endif
+
+        <form method="post" action="{{ route('admin.broadcast.preview') }}">
             @csrf
             <div class="toolbar" style="margin-bottom:.5rem;">
                 <div>
                     <label>Сегмент</label>
                     <select name="segment">
-                        <option value="all_completed" @selected(old('segment', 'all_completed') === 'all_completed')>Онбординг готов — все</option>
-                        <option value="in_onboarding" @selected(old('segment') === 'in_onboarding')>Застряли в онбординге</option>
-                        <option value="active_7d" @selected(old('segment') === 'active_7d')>Активны 7 дней (был чек-ин)</option>
-                        <option value="inactive_7d" @selected(old('segment') === 'inactive_7d')>Готовы, но 7+ дней без чек-ина</option>
-                        <option value="inactive_14d" @selected(old('segment') === 'inactive_14d')>Готовы, но 14+ дней без чек-ина</option>
-                        <option value="new_7d" @selected(old('segment') === 'new_7d')>Новые за 7 дней (любой этап)</option>
-                        <option value="completed_never_checked" @selected(old('segment') === 'completed_never_checked')>Онбординг готов, ни одного чек-ина</option>
-                        <option value="streak_3_plus" @selected(old('segment') === 'streak_3_plus')>Серия чек-инов ≥ 3 дня</option>
-                        <option value="plan_full" @selected(old('segment') === 'plan_full')>Режим плана FitBot</option>
-                        <option value="discipline_only" @selected(old('segment') === 'discipline_only')>Только дисциплина (свой план)</option>
-                        <option value="low_activity_14d" @selected(old('segment') === 'low_activity_14d')>≤ 1 чек-ин за 14 дней</option>
+                        @foreach ($segmentLabels as $sid => $slabel)
+                            <option value="{{ $sid }}" @selected(old('segment', is_array($broadcastPending) ? $broadcastPending['segment'] : 'all_completed') === $sid)>{{ $slabel }}</option>
+                        @endforeach
                     </select>
                 </div>
             </div>
-            <textarea name="message" rows="5" required placeholder="Текст…">{{ old('message') }}</textarea>
-            <button type="submit" style="margin-top:.5rem;">Отправить</button>
+            <textarea name="message" rows="5" required placeholder="Текст…">{{ old('message', is_array($broadcastPending) ? $broadcastPending['message'] : '') }}</textarea>
+            <button type="submit" style="margin-top:.5rem;">Показать получателей</button>
         </form>
     </div>
 

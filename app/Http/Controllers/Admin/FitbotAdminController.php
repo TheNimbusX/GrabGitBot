@@ -52,9 +52,10 @@ class FitbotAdminController extends Controller
         return view('admin.dashboard', $dashboard->build($request));
     }
 
-    public function broadcast(Request $request, TelegramBotService $telegram, RatingService $rating): RedirectResponse
+    /** @return list<string> */
+    private function broadcastSegments(): array
     {
-        $segments = [
+        return [
             'all_completed',
             'in_onboarding',
             'active_7d',
@@ -67,14 +68,88 @@ class FitbotAdminController extends Controller
             'discipline_only',
             'low_activity_14d',
         ];
+    }
 
+    public function broadcastPreview(Request $request, RatingService $rating): RedirectResponse
+    {
+        $segments = $this->broadcastSegments();
         $data = $request->validate([
             'message' => 'required|string|max:4090',
             'segment' => 'nullable|string|in:'.implode(',', $segments),
         ]);
 
-        $text = $data['message'];
         $segment = $data['segment'] ?? 'all_completed';
+        $count = $this->countBroadcastRecipients($segment, $rating);
+
+        $request->session()->put('fitbot_broadcast_pending', [
+            'message' => $data['message'],
+            'segment' => $segment,
+            'recipient_count' => $count,
+        ]);
+
+        return back()->with('broadcast_preview_ok', true);
+    }
+
+    public function broadcastConfirm(Request $request, TelegramBotService $telegram, RatingService $rating): RedirectResponse
+    {
+        $pending = $request->session()->get('fitbot_broadcast_pending');
+        if (! is_array($pending)) {
+            return back()->withErrors(['broadcast' => 'Сначала нажми «Показать получателей».']);
+        }
+
+        $segments = $this->broadcastSegments();
+        $data = $request->validate([
+            'message' => 'required|string|max:4090',
+            'segment' => 'required|string|in:'.implode(',', $segments),
+            'confirm_broadcast' => 'required|accepted',
+        ]);
+
+        if ($data['message'] !== $pending['message'] || $data['segment'] !== $pending['segment']) {
+            return back()->withErrors(['broadcast' => 'Текст или сегмент не совпали с предпросмотром. Сделай предпросмотр снова.']);
+        }
+
+        $countNow = $this->countBroadcastRecipients($pending['segment'], $rating);
+        if ($countNow !== (int) $pending['recipient_count']) {
+            return back()->withErrors([
+                'broadcast' => "Число получателей изменилось: было {$pending['recipient_count']}, сейчас {$countNow}. Обнови предпросмотр.",
+            ]);
+        }
+
+        $n = $this->deliverBroadcast($telegram, $rating, $pending['message'], $pending['segment']);
+        $request->session()->forget('fitbot_broadcast_pending');
+
+        return back()->with('broadcast_status', "Отправлено {$n} из {$pending['recipient_count']} (сегмент «{$pending['segment']}»).");
+    }
+
+    public function broadcastCancel(Request $request): RedirectResponse
+    {
+        $request->session()->forget('fitbot_broadcast_pending');
+
+        return back()->with('broadcast_status', 'Черновик рассылки сброшен.');
+    }
+
+    private function countBroadcastRecipients(string $segment, RatingService $rating): int
+    {
+        if ($segment === 'streak_3_plus') {
+            $n = 0;
+            User::query()->completedFitbotOnboarding()->chunkById(200, function ($users) use ($rating, &$n) {
+                foreach ($users as $user) {
+                    if ($rating->checkInStreakDays($user) >= 3) {
+                        $n++;
+                    }
+                }
+            });
+
+            return $n;
+        }
+
+        $q = $this->broadcastRecipientsQuery($segment);
+
+        return $q === null ? 0 : (clone $q)->count();
+    }
+
+    private function deliverBroadcast(TelegramBotService $telegram, RatingService $rating, string $text, string $segment): int
+    {
         $n = 0;
 
         if ($segment === 'streak_3_plus') {
@@ -88,22 +163,24 @@ class FitbotAdminController extends Controller
                     usleep(40000);
                 }
             });
-        } else {
-            $q = $this->broadcastRecipientsQuery($segment);
-            if ($q === null) {
-                return back()->withErrors(['segment' => 'Неизвестный сегмент.']);
-            }
 
-            $q->chunkById(80, function ($users) use ($telegram, $text, &$n) {
-                foreach ($users as $user) {
-                    $telegram->sendMessage((int) $user->telegram_id, $text, null, null);
-                    $n++;
-                    usleep(40000);
-                }
-            });
+            return $n;
         }
 
-        return back()->with('broadcast_status', "Сегмент «{$segment}»: отправлено {$n} пользователям.");
+        $q = $this->broadcastRecipientsQuery($segment);
+        if ($q === null) {
+            return 0;
+        }
+
+        $q->chunkById(80, function ($users) use ($telegram, $text, &$n) {
+            foreach ($users as $user) {
+                $telegram->sendMessage((int) $user->telegram_id, $text, null, null);
+                $n++;
+                usleep(40000);
+            }
+        });
+
+        return $n;
     }
 
     /** @return Builder<User>|null */
