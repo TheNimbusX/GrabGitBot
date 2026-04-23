@@ -53,7 +53,10 @@ class FitbotEveningReminderCommand extends Command
                     if (! Cache::has($softKey) || Cache::has($strictKey)) {
                         continue;
                     }
-                    $text = FitBotMessaging::eveningReminderStrict();
+                    $dayNum = FitBotMessaging::dayNumberInBot($user, $todayStart);
+                    $text = $dayNum <= 1
+                        ? FitBotMessaging::eveningReminderStrictFirstDayInBot()
+                        : FitBotMessaging::eveningReminderStrict();
                 } else {
                     if (Cache::has($softKey)) {
                         continue;

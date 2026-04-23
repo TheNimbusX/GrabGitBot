@@ -52,7 +52,9 @@ final class FitBotMessaging
         $lines[] = 'Пара минут - и ты хотя бы знаешь, где ты, а не додумываешь.';
 
         $yesterday = $today->copy()->subDay();
-        $missedYesterday = ! $rating->hasCompletedCheckOnDate($user, $yesterday);
+        $couldCheckYesterday = self::userWasRegisteredOnOrBeforeCalendarDay($user, $yesterday);
+        $missedYesterday = $couldCheckYesterday
+            && ! $rating->hasCompletedCheckOnDate($user, $yesterday);
 
         if ($missedYesterday) {
             $lines[] = '';
@@ -60,7 +62,10 @@ final class FitBotMessaging
             $lines[] = 'Сегодня не усугубляй - зайди в /check.';
 
             $twoAgo = $today->copy()->subDays(2);
-            if (! $rating->hasCompletedCheckOnDate($user, $twoAgo)) {
+            if (
+                self::userWasRegisteredOnOrBeforeCalendarDay($user, $twoAgo)
+                && ! $rating->hasCompletedCheckOnDate($user, $twoAgo)
+            ) {
                 $lines[] = '';
                 $lines[] = 'И позавчера пусто. Так часто начинают отваливаться - пока не поздно развернуть.';
             }
@@ -79,6 +84,13 @@ final class FitBotMessaging
     {
         return "Ты снова игноришь чек-ин.\n\n"
             .'Так обычно и срываются - не разом, а маленькими «завтра».';
+    }
+
+    /** Второе напоминание вечером: в первый день в боте без «снова». */
+    public static function eveningReminderStrictFirstDayInBot(): string
+    {
+        return "Сегодня чек-ин ещё не закрыт.\n\n"
+            .'Первый день как раз про то, чтобы просто отметиться - без идеала, по факту. Зайди в /check.';
     }
 
     public static function churnAfterTwoDays(): string
@@ -191,6 +203,15 @@ final class FitBotMessaging
     public static function dayNumberInBot(User $user, Carbon $now): int
     {
         return (int) $user->created_at->copy()->startOfDay()->diffInDays($now->copy()->startOfDay()) + 1;
+    }
+
+    /**
+     * Пользователь уже был зарегистрирован к началу этого календарного дня
+     * (иначе нельзя честно говорить «вчера не отметился» / «позавчера пусто»).
+     */
+    public static function userWasRegisteredOnOrBeforeCalendarDay(User $user, Carbon $calendarDay): bool
+    {
+        return $user->created_at->copy()->startOfDay()->lte($calendarDay->copy()->startOfDay());
     }
 
     public static function morningDay7(): string
