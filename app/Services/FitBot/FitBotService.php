@@ -79,7 +79,7 @@ class FitBotService
 
         $text = $this->normalizeMessageText((string) ($msg['text'] ?? ''));
         $isCommand = $text !== '' && Str::startsWith($text, '/');
-        if (! $isCommand && empty($msg['photo'])) {
+        if (! $isCommand && empty($msg['photo']) && ! $this->isUserCancelCheckPhrase($text)) {
             $this->scheduleDeferredProgressPhotoReminder($user, $chatId);
         }
 
@@ -88,13 +88,14 @@ class FitBotService
             match ($command) {
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
+                '/cancel' => $this->cmdCancelCheck($user, $chatId),
                 '/rating' => $this->cmdRating($user, $chatId),
                 '/plan' => $this->cmdPlan($user, $chatId),
                 '/analytics', '/stats', '/аналитика' => $this->cmdExtendedAnalytics($user, $chatId),
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 default => $this->telegram->sendMessage(
                     $chatId,
-                    '🤔 Неизвестная команда. Доступны: /start, /check, /rating, /plan, /analytics, /settings',
+                    '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /settings',
                     $user->hasCompletedOnboarding() ? $this->mainMenuKeyboard() : null
                 ),
             };
@@ -128,6 +129,12 @@ class FitBotService
             }
         }
 
+        if ($text !== '' && $user->hasCompletedOnboarding() && $this->isUserCancelCheckPhrase($text)) {
+            $this->cmdCancelCheck($user, $chatId);
+
+            return;
+        }
+
         if ($text !== '' && $user->hasCompletedOnboarding()) {
             if ($this->tryConsumeCheckQuantityReply($user, $chatId, $text)) {
                 return;
@@ -157,7 +164,7 @@ class FitBotService
         if ($user->hasCompletedOnboarding()) {
             $this->telegram->sendMessage(
                 $chatId,
-                '👇 Выбери действие кнопками внизу или команды: /check, /rating, /plan, /analytics, /settings',
+                '👇 Кнопки внизу или команды: /check, /cancel, /rating, /plan, /analytics, /settings',
                 $this->mainMenuKeyboard()
             );
         }
@@ -377,6 +384,79 @@ class FitBotService
         );
     }
 
+    /** Сбросить незавершённый чек-ин за сегодня (если есть). */
+    private function cmdCancelCheck(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, 'Сначала завершите онбординг: /start');
+
+            return;
+        }
+
+        if ($this->tryCancelIncompleteCheck($user, $chatId)) {
+            return;
+        }
+
+        $this->telegram->sendMessage(
+            $chatId,
+            'Незавершённого чек-ина за сегодня нет. Открыть заново: <b>/check</b>.',
+            $this->mainMenuKeyboard()
+        );
+    }
+
+    private function isUserCancelCheckPhrase(string $text): bool
+    {
+        $t = Str::lower(trim($text));
+
+        return in_array($t, [
+            'отмена',
+            'отменить',
+            'отменить чек-ин',
+            'cancel',
+            'стоп',
+            '❌ отменить чек-ин',
+        ], true);
+    }
+
+    /**
+     * Удалить черновик чек-ина за сегодня. При несовпадении $checkId (старая кнопка) пробуем любой черновик за сегодня.
+     */
+    private function tryCancelIncompleteCheck(User $user, int $chatId, ?int $checkId = null): bool
+    {
+        $today = Carbon::today()->toDateString();
+        $check = null;
+        if ($checkId !== null) {
+            $check = DailyCheck::query()
+                ->where('user_id', $user->id)
+                ->where('is_completed', false)
+                ->whereDate('check_date', $today)
+                ->whereKey($checkId)
+                ->first();
+        }
+        if ($check === null) {
+            $check = DailyCheck::query()
+                ->where('user_id', $user->id)
+                ->where('is_completed', false)
+                ->whereDate('check_date', $today)
+                ->first();
+        }
+
+        if ($check === null) {
+            return false;
+        }
+
+        $check->delete();
+        $this->telegram->sendMessage(
+            $chatId,
+            '❌ <b>Чек-ин отменён.</b>'."\n\n"
+            .'Начать снова: кнопка <b>Чек-ин</b> или <b>/check</b>.'."\n"
+            .'<i>/cancel</i> всегда сбрасывает незавершённый чек за сегодня.',
+            $this->mainMenuKeyboard()
+        );
+
+        return true;
+    }
+
     /** Нижняя (reply) клавиатура — кнопки «Настройки» и остальное всегда видны под полем ввода. */
     /** @return array<string, mixed> */
     private function mainMenuKeyboard(): array
@@ -390,11 +470,23 @@ class FitBotService
         return $this->telegram->inlineKeyboard([
             [['text' => '✏️ Сменить анкету', 'callback_data' => 'set:edit']],
             [['text' => '🗑 Удалить аккаунт', 'callback_data' => 'set:del:s']],
+            [['text' => '🏠 В главное меню', 'callback_data' => 'set:home']],
         ]);
     }
 
     private function handleSettingsCallback(User $user, int $chatId, string $data): void
     {
+        if ($data === 'set:home') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->telegram->sendMessage(
+                $chatId,
+                'Ок, ниже снова основные кнопки. Незавершённый чек-ин за сегодня можно сбросить: <b>/cancel</b>.',
+                $this->mainMenuKeyboard()
+            );
+
+            return;
+        }
+
         if ($data === 'set:edit') {
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             $this->resetProfileForReonboarding($user);
@@ -881,6 +973,15 @@ class FitBotService
     private function handleCheckCallback(User $user, int $chatId, string $data): void
     {
         $parts = explode(':', $data);
+        if (count($parts) === 3 && ($parts[2] ?? '') === 'cancel') {
+            $cid = (int) ($parts[1] ?? 0);
+            if ($cid > 0) {
+                $this->tryCancelIncompleteCheck($user, $chatId, $cid);
+            }
+
+            return;
+        }
+
         if (count($parts) !== 4) {
             return;
         }
@@ -979,7 +1080,8 @@ class FitBotService
         if (! $check->diet_rating) {
             $this->telegram->sendMessage(
                 $chatId,
-                '🍽 Чтобы продолжить чек-ин, сначала нажми кнопку про <b>питание</b> (сообщение выше).'
+                '🍽 Сначала нажми кнопку про <b>питание</b> (сообщение выше).'."\n"
+                .'Или отмени чек-ин: <b>/cancel</b>.'
             );
 
             return true;
@@ -992,7 +1094,8 @@ class FitBotService
         if ($check->diet_rating && $check->sleep_rating && ! $check->workout_rating) {
             $this->telegram->sendMessage(
                 $chatId,
-                '💪 Тут нужны кнопки — выбери, как прошёл день с <b>нагрузкой</b> (сообщение выше).'
+                '💪 Тут нужны кнопки — выбери <b>движение</b> (сообщение выше).'."\n"
+                .'Или <b>/cancel</b>.'
             );
 
             return true;
@@ -1011,7 +1114,8 @@ class FitBotService
         if ($hours === null || $hours < 0 || $hours > 16) {
             $this->telegram->sendMessage(
                 $chatId,
-                '😴 Напиши часы сна числом от <b>0</b> до <b>16</b> (можно <b>7.5</b>).'
+                '😴 Напиши часы сна числом от <b>0</b> до <b>16</b> (например <b>7.5</b>).'."\n"
+                .'Выйти из чек-ина: <b>/cancel</b> или кнопка под сообщением про сон.'
             );
 
             return true;
@@ -1040,7 +1144,9 @@ class FitBotService
         if ($ml === null || $ml < 100 || $ml > 20000) {
             $this->telegram->sendMessage(
                 $chatId,
-                '💧 Не разобрал объём. Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'
+                '💧 Не разобрал объём. Допустимо примерно <b>100–20 000</b> мл.'."\n"
+                .'Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'."\n"
+                .'Отмена: <b>/cancel</b> или кнопка под вопросом про воду.'
             );
 
             return true;
@@ -1094,7 +1200,8 @@ class FitBotService
         if (! $check->diet_rating) {
             $this->telegram->sendMessage(
                 $chatId,
-                '🍽 <b>Питание сегодня?</b> Как получилось держать план?',
+                '🍽 <b>Питание сегодня?</b> Как получилось держать план?'."\n\n"
+                .'<i>Весь чек можно прервать: /cancel или кнопка внизу.</i>',
                 $this->dietRatingKeyboard((int) $check->id)
             );
 
@@ -1106,8 +1213,11 @@ class FitBotService
             $this->telegram->sendMessage(
                 $chatId,
                 '😴 <b>Сон прошлой ночью</b>'."\n\n"
-                .'Сколько часов реально спал? Напиши число (например <b>7.5</b>).'."\n"
-                .'🎯 Цель из анкеты: <b>'.$target.'</b> ч — от неё посчитаю баллы.'
+                .'Сколько часов реально спал? Напиши <b>одно число</b> в чат (например <b>7.5</b>).'."\n"
+                .'🎯 Цель из анкеты: <b>'.$target.'</b> ч.'."\n"
+                .'Диапазон: <b>0–16</b> ч. Написать можно и запятой: <code>7,5</code>'."\n\n"
+                .'<i>Застрял — /cancel или кнопка ниже.</i>',
+                $this->checkCancelMarkup((int) $check->id)
             );
 
             return;
@@ -1116,7 +1226,7 @@ class FitBotService
         if (! $check->workout_rating) {
             $this->telegram->sendMessage(
                 $chatId,
-                '💪 <b>Движение сегодня</b>',
+                '💪 <b>Движение сегодня</b>'."\n\n".'<i>Отмена чек-ина — кнопка внизу.</i>',
                 $this->workoutVariantKeyboard((int) $check->id)
             );
 
@@ -1128,11 +1238,21 @@ class FitBotService
             $this->telegram->sendMessage(
                 $chatId,
                 '💧 <b>Вода за день</b>'."\n\n"
-                .'Сколько примерно выпил? Если не считал точно — оцени «на глаз», этого достаточно.'."\n"
+                .'Сколько примерно выпил? Если не считал — оцени на глаз.'."\n"
                 .'Примеры: <code>2000</code>, <code>1.5 л</code>, <code>2500 мл</code>'."\n"
-                .'🎯 Цель из плана: <b>'.$goal.'</b> мл'
+                .'🎯 Цель: <b>'.$goal.'</b> мл · допустимо примерно <b>100–20 000</b> мл'."\n\n"
+                .'<i>/cancel — выйти из чек-ина.</i>',
+                $this->checkCancelMarkup((int) $check->id)
             );
         }
+    }
+
+    /** Одна строка inline: отменить незавершённый чек-ин. */
+    private function checkCancelMarkup(int $checkId): array
+    {
+        return $this->telegram->inlineKeyboard([
+            [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
+        ]);
     }
 
     private function dietRatingKeyboard(int $checkId): array
@@ -1145,6 +1265,7 @@ class FitBotService
                 ['text' => CheckRating::Yellow->emoji().' нормально', 'callback_data' => $prefix.CheckRating::Yellow->value],
                 ['text' => CheckRating::Red->emoji().' плохо', 'callback_data' => $prefix.CheckRating::Red->value],
             ],
+            [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
         ]);
     }
 
@@ -1156,6 +1277,7 @@ class FitBotService
             [['text' => '💪 Позанимался', 'callback_data' => $p.WorkoutCheckVariant::Trained->value]],
             [['text' => '😴 День отдыха', 'callback_data' => $p.WorkoutCheckVariant::Rest->value]],
             [['text' => '❌ Прогулял (пропустил тренировку)', 'callback_data' => $p.WorkoutCheckVariant::Skipped->value]],
+            [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
         ]);
     }
 
