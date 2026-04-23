@@ -14,7 +14,7 @@ class FitbotMorningMotivationCommand extends Command
 {
     protected $signature = 'fitbot:morning-motivation';
 
-    protected $description = 'Утро: мягкий тон 1–3 день, крючок 4–6, день 7 — отдельный сценарий, дальше — ровный «зеркальный» пул';
+    protected $description = 'Утро: мягкий тон 1–2 день, крючок 3–6, день 7 — отдельный сценарий, дальше — ровный пул';
 
     public function handle(TelegramBotService $telegram): int
     {
@@ -38,7 +38,7 @@ class FitbotMorningMotivationCommand extends Command
 
                 if ($dayNum === 7) {
                     $text = FitBotMessaging::morningDay7();
-                } elseif ($dayNum <= 3) {
+                } elseif ($dayNum <= 2) {
                     $text = FitBotMessaging::pickStable($dateKey, (int) $user->telegram_id, FitBotMessaging::morningSoftPool());
                 } elseif ($dayNum <= 6) {
                     $text = FitBotMessaging::pickStable($dateKey, (int) $user->telegram_id, FitBotMessaging::morningHookPool());

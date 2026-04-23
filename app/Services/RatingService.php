@@ -180,13 +180,15 @@ class RatingService
         return $hints ?: ['⚖️ Пока всё в балансе — продолжай в том же духе!'];
     }
 
-    /** Одна строка для чек-ина /rating: свой текст или авто по слабой оси за ~7 дней. */
-    public function weeklyFocusLine(User $user, ?Carbon $now = null): string
+    /**
+     * Текст фокуса без префикса «Фокус недели» — для строки «Сейчас: …» в настройках и после смены фокуса.
+     */
+    public function weeklyFocusContentHtml(User $user, ?Carbon $now = null): string
     {
         $now ??= Carbon::now();
         $note = $user->weekly_focus_note;
         if (is_string($note) && trim($note) !== '') {
-            return '🎯 <b>Фокус недели:</b> '.e(trim($note));
+            return e(trim($note));
         }
 
         $from = $now->copy()->subDays(7)->startOfDay();
@@ -196,7 +198,7 @@ class RatingService
             ->count();
 
         if ($completedCount < 2) {
-            return '🎯 <b>Фокус недели:</b> закрепи <b>регулярный чек-ин</b> — тогда станет ясно, что тянуть в первую очередь.';
+            return 'закрепи <b>регулярный чек-ин</b> — тогда станет ясно, что тянуть в первую очередь.';
         }
 
         /** @var Collection<int, DailyCheck> $checks */
@@ -232,10 +234,16 @@ class RatingService
         $label = $dimensions[$lowestKey]['label'] ?? 'ритм';
 
         if ($lowestAvg >= 1.75) {
-            return '🎯 <b>Фокус недели:</b> держи <b>баланс и регулярность</b> — по последним дням оси ровные.';
+            return 'держи <b>баланс и регулярность</b> — по последним дням оси ровные.';
         }
 
-        return '🎯 <b>Фокус недели:</b> чуть чаще проседает <b>'.$label.'</b> — имеет смысл присмотреться к этой оси.';
+        return 'чуть чаще проседает <b>'.$label.'</b> — имеет смысл присмотреться к этой оси.';
+    }
+
+    /** Одна строка для чек-ина /rating: свой текст или авто по слабой оси за ~7 дней. */
+    public function weeklyFocusLine(User $user, ?Carbon $now = null): string
+    {
+        return '🎯 <b>Фокус недели:</b> '.$this->weeklyFocusContentHtml($user, $now);
     }
 
     public function formatSummaryMessage(User $user, ?Carbon $now = null): string

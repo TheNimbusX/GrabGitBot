@@ -117,7 +117,9 @@ class FitBotService
                 $user->save();
                 $this->telegram->sendMessage(
                     $chatId,
-                    FitBotMessaging::weeklyFocusSavedAfterText(),
+                    FitBotMessaging::weeklyFocusSavedAfterText()
+                        ."\n\n"
+                        .FitBotMessaging::weeklyFocusUiNowLine($this->rating, $user),
                     $this->mainMenuKeyboard()
                 );
 
@@ -652,7 +654,9 @@ class FitBotService
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             $this->telegram->sendMessage(
                 $chatId,
-                FitBotMessaging::weeklyFocusMenuTitle(),
+                FitBotMessaging::weeklyFocusMenuTitle()
+                    ."\n\n"
+                    .FitBotMessaging::weeklyFocusUiNowLine($this->rating, $user),
                 $this->weeklyFocusMenuKeyboard()
             );
 
@@ -674,9 +678,12 @@ class FitBotService
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             $user->weekly_focus_note = null;
             $user->save();
+            $user->refresh();
             $this->telegram->sendMessage(
                 $chatId,
-                FitBotMessaging::weeklyFocusCleared(),
+                FitBotMessaging::weeklyFocusCleared()
+                    ."\n\n"
+                    .FitBotMessaging::weeklyFocusUiNowLine($this->rating, $user),
                 $this->mainMenuKeyboard()
             );
 
@@ -695,7 +702,9 @@ class FitBotService
             $label = FitBotMessaging::weeklyFocusPresetButtonLabel($id);
             $this->telegram->sendMessage(
                 $chatId,
-                FitBotMessaging::weeklyFocusPresetApplied($label),
+                FitBotMessaging::weeklyFocusPresetApplied($label)
+                    ."\n\n"
+                    .FitBotMessaging::weeklyFocusUiNowLine($this->rating, $user),
                 $this->mainMenuKeyboard()
             );
 
@@ -708,6 +717,8 @@ class FitBotService
             $this->telegram->sendMessage(
                 $chatId,
                 FitBotMessaging::weeklyFocusAskCustom()
+                    ."\n\n"
+                    .FitBotMessaging::weeklyFocusUiNowLine($this->rating, $user)
             );
 
             return;
@@ -987,6 +998,7 @@ class FitBotService
             FitBotMessaging::onboardingAfterAge(),
             $this->onboardingTextPromptKeyboard()
         );
+        $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingValueBridge());
     }
 
     private function onboardingHeight(User $user, int $chatId, string $text): void
@@ -1221,7 +1233,7 @@ class FitBotService
             $chatId,
             FitBotMessaging::welcomeScreenText(),
             $this->telegram->inlineKeyboard([
-                [['text' => '▶️ Продолжить', 'callback_data' => 'onb:welcome:continue']],
+                [['text' => FitBotMessaging::welcomeContinueButtonLabel(), 'callback_data' => 'onb:welcome:continue']],
             ])
         );
     }
@@ -1437,6 +1449,8 @@ class FitBotService
     {
         $check->refresh();
         if ($check->diet_rating && $check->sleep_rating && $check->workout_rating && $check->water_rating) {
+            $isFirstEverCompletedCheck = ! $user->dailyChecks()->where('is_completed', true)->exists();
+
             $check->is_completed = true;
             $this->rating->recalculateDailyCheck($check);
             $check->save();
@@ -1449,7 +1463,7 @@ class FitBotService
 
             $streak = $this->rating->checkInStreakDays($user);
 
-            $blocks = ['✅ <b>Чек-ин сохранён.</b>'];
+            $blocks = ['✅ Чек-ин на месте, записал.'];
             if ($comeback) {
                 $blocks[] = FitBotMessaging::comebackHead();
             }
@@ -1457,6 +1471,9 @@ class FitBotService
             $streakLine = FitBotMessaging::streakCelebrationLine($streak);
             if ($streakLine !== null) {
                 $blocks[] = $streakLine;
+            }
+            if ($isFirstEverCompletedCheck) {
+                $blocks[] = FitBotMessaging::firstEverCheckClosing();
             }
             $weekPhoto = $this->maybeWeekPhotoNudgeBlock($user);
             if ($weekPhoto !== null) {
