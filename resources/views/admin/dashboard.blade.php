@@ -697,8 +697,8 @@
         }
         .sticky-col--b {
             left: 12.5rem;
-            min-width: 10.5rem;
-            max-width: 12rem;
+            min-width: 11rem;
+            max-width: 15rem;
         }
         .sticky-col--a .pulse {
             white-space: normal;
@@ -1263,16 +1263,16 @@
                         </div>
                     </form>
 
-                    <p class="hint" style="margin-top:0;">На широком экране закреплены колонки «Пульс» и «Уровень» — листай вправо для цифр и дат.</p>
+                    <p class="hint" style="margin-top:0;">На широком экране закреплены «Пульс» и «Имя» — листай вправо для уровня, цифр и дат.</p>
                     <div class="table-users-shell">
                         <table class="responsive table-users">
                             <thead>
                                 <tr>
                                     <th class="sticky-col--a">Пульс</th>
-                                    <th class="sticky-col--b">Уровень</th>
+                                    <th class="sticky-col--b">Имя</th>
                                     <th>ID</th>
                                     <th>Telegram</th>
-                                    <th>Имя</th>
+                                    <th>Уровень</th>
                                     <th class="num">Возраст</th>
                                     <th class="num">Вес</th>
                                     <th>План</th>
@@ -1302,16 +1302,16 @@
                                                 <div class="no" style="font-size:.72rem;margin-top:.25rem;">{{ $row['onboarding_hint'] }}</div>
                                             @endif
                                         </td>
-                                        <td class="sticky-col--b tier-cell" data-label="Уровень">
-                                            <span class="e">{{ $tier->emoji() }}</span><b>{{ $tier->labelRu() }}</b>
-                                            <div class="no" style="font-size:.7rem;margin-top:.2rem;">серия {{ $row['streak'] }} · {{ $tier->criteriaRu() }}</div>
-                                        </td>
+                                        <td class="sticky-col--b" data-label="Имя">{{ $u->first_name }} @if($u->username) <span class="no">{{ '@'.$u->username }}</span> @endif</td>
                                         <td class="num" data-label="ID">{{ $u->id }}</td>
                                         <td class="num" data-label="Telegram">
                                             {{ $u->telegram_id }}
                                             <button type="button" class="copy-tg" data-copy="{{ $u->telegram_id }}" title="Копировать">⎘</button>
                                         </td>
-                                        <td data-label="Имя">{{ $u->first_name }} @if($u->username) <span class="no">{{ '@'.$u->username }}</span> @endif</td>
+                                        <td class="tier-cell" data-label="Уровень">
+                                            <span class="e">{{ $tier->emoji() }}</span><b>{{ $tier->labelRu() }}</b>
+                                            <div class="no" style="font-size:.7rem;margin-top:.2rem;">серия {{ $row['streak'] }} · {{ $tier->criteriaRu() }}</div>
+                                        </td>
                                         <td class="num" data-label="Возраст">{{ $u->age ?? '—' }}</td>
                                         <td class="num" data-label="Вес">{{ $u->weight_kg !== null ? number_format((float) $u->weight_kg, 1, '.', '') : '—' }}</td>
                                         <td data-label="План">
