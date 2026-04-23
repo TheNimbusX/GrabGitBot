@@ -13,7 +13,9 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         $schedule->command('fitbot:morning-motivation')->dailyAt('10:00');
+        $schedule->command('fitbot:churn-reminder')->dailyAt('14:00');
         $schedule->command('fitbot:evening-reminder')->dailyAt('20:00');
+        $schedule->command('fitbot:evening-reminder --follow-up')->dailyAt('20:10');
     }
 
     /**

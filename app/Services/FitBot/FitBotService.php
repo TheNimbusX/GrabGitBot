@@ -117,7 +117,7 @@ class FitBotService
                     'settings' => $this->cmdSettings($user, $chatId),
                     'plan_ai' => $this->telegram->sendMessage(
                         $chatId,
-                        '🤖 Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
+                        '💎 <b>PRO / AI-тренировки</b> — позже, с оплатой. Сейчас пользуйся планом и чек-инами бесплатно.',
                         $this->mainMenuKeyboard()
                     ),
                 };
@@ -208,7 +208,9 @@ class FitBotService
         if ($data === 'pay:ai') {
             $this->telegram->sendMessage(
                 $chatId,
-                'Персональный план (AI) доступен в платной версии. Скоро добавим оплату и генерацию программы.',
+                '💎 <b>PRO</b> (когда подключим): AI-тренировки под твой уровень и цель, режим давления, серии, коллажи прогресса, аналитика.'
+                ."\n\n"
+                .'Сейчас всё основное уже в бесплатной версии — продолжай чек-ины и план.',
                 $this->mainMenuKeyboard()
             );
 
@@ -359,19 +361,7 @@ class FitBotService
     /** @return array<string, mixed> */
     private function mainMenuKeyboard(): array
     {
-        return $this->telegram->replyKeyboard([
-            [
-                ['text' => 'Чек-ин'],
-                ['text' => 'Рейтинг'],
-                ['text' => '📋 План'],
-            ],
-            [
-                ['text' => '⚙️ Настройки'],
-            ],
-            [
-                ['text' => '👉 Персональный план (AI)'],
-            ],
-        ]);
+        return $this->telegram->fitbotMainMenuKeyboard();
     }
 
     /** @return array<string, mixed> */
@@ -857,10 +847,12 @@ class FitBotService
         $user->refresh();
 
         $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
+        $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingDisciplineIntro());
+        $this->telegram->sendMessage($chatId, FitBotMessaging::onboardingFreeVsProHint());
         $this->telegram->sendMessage(
             $chatId,
-            '🎉 <b>Готово!</b> Каждый день — <b>/check</b> ✍️, статистика — <b>/rating</b> 📊, план под рукой — кнопка <b>«План»</b> или <b>/plan</b>.'
-            ."\n".'Раз в ~30 дней напомню про фото прогресса 📷',
+            '🎉 '.FitBotMessaging::onboardingAfterPlanFooter()
+            ."\n\n".'Раз в ~30 дней напомню про фото прогресса 📷',
             $this->mainMenuKeyboard()
         );
     }
@@ -915,9 +907,32 @@ class FitBotService
             $check->is_completed = true;
             $this->rating->recalculateDailyCheck($check);
             $check->save();
+
+            $this->forgetEveningReminderCachesForUser((int) $user->id);
+
+            $priorMax = $this->rating->lastCompletedCheckDateBefore($user, $check->check_date->toDateString());
+            $comeback = $priorMax !== null
+                && Carbon::parse($priorMax)->startOfDay()->diffInDays($check->check_date->copy()->startOfDay()) >= 2;
+
+            $streak = $this->rating->checkInStreakDays($user);
+
+            $blocks = ['✅ <b>Чек-ин сохранён.</b>'];
+            if ($comeback) {
+                $blocks[] = FitBotMessaging::comebackHead();
+            }
+            $blocks[] = FitBotMessaging::completedCheckClosing($check, $this->rating);
+            $streakLine = FitBotMessaging::streakCelebrationLine($streak);
+            if ($streakLine !== null) {
+                $blocks[] = $streakLine;
+            }
+            $weekPhoto = $this->maybeWeekPhotoNudgeBlock($user);
+            if ($weekPhoto !== null) {
+                $blocks[] = $weekPhoto;
+            }
+
             $this->telegram->sendMessage(
                 $chatId,
-                '✅ Чек-ин сохранён! Сегодня: <b>'.$check->total_score.'</b> / '.RatingService::MAX_DAILY_POINTS.' баллов 🎯',
+                implode("\n\n", $blocks),
                 $this->mainMenuKeyboard()
             );
 
@@ -1123,6 +1138,28 @@ class FitBotService
         ]);
     }
 
+    private function forgetEveningReminderCachesForUser(int $userId): void
+    {
+        $today = now()->toDateString();
+        Cache::forget("fitbot:evening_soft:{$userId}:{$today}");
+        Cache::forget("fitbot:evening_strict:{$userId}:{$today}");
+    }
+
+    /** Одноразовый блок через ~7 дней в боте (не путать с напоминанием раз в 30 дней). */
+    private function maybeWeekPhotoNudgeBlock(User $user): ?string
+    {
+        $key = 'fitbot:week7_photo_hint:'.$user->id;
+        if (Cache::has($key)) {
+            return null;
+        }
+        if (FitBotMessaging::dayNumberInBot($user, now()) < 7) {
+            return null;
+        }
+        Cache::put($key, true, now()->addDays(365));
+
+        return FitBotMessaging::weekPhotoEncouragement();
+    }
+
     private function syncUser(int $telegramId, array $from): User
     {
         $user = User::query()->firstOrNew(['telegram_id' => $telegramId]);
@@ -1157,7 +1194,9 @@ class FitBotService
 
         $this->telegram->sendMessage(
             $chatId,
-            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.',
+            'Пора обновить <b>фото прогресса</b> (раз в 30 дней). Пришли одно фото сообщением.'
+            ."\n\n"
+            .'Фото не спорит — даже когда голова ищет отмазку.',
             $this->mainMenuKeyboard()
         );
     }

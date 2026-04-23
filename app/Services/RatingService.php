@@ -219,11 +219,49 @@ class RatingService
         return $streak;
     }
 
-    private function hasCompletedCheckOnDate(User $user, Carbon $day): bool
+    public function hasCompletedCheckOnDate(User $user, Carbon $day): bool
     {
         return $user->dailyChecks()
             ->whereDate('check_date', $day->toDateString())
             ->where('is_completed', true)
             ->exists();
+    }
+
+    /**
+     * Самая слабая ось в конкретном чек-ине (null — если всё на максимуме по баллам).
+     */
+    public function weakestDimensionLabelForCheck(DailyCheck $check): ?string
+    {
+        $dims = [
+            'питание' => $this->pointsForRating($check->diet_rating),
+            'сон' => $this->pointsForRating($check->sleep_rating),
+            'тренировки' => $this->pointsForRating($check->workout_rating),
+            'вода' => $this->pointsForRating($check->water_rating),
+        ];
+        $min = min($dims);
+        if ($min >= 2) {
+            return null;
+        }
+
+        $weak = array_keys(array_filter($dims, fn (int $p) => $p === $min));
+        if (count($weak) >= 3) {
+            return 'несколько пунктов';
+        }
+        if (count($weak) === 2) {
+            return $weak[0].' и '.$weak[1];
+        }
+
+        return $weak[0];
+    }
+
+    /** Последняя дата завершённого чек-ина строго до указанной календарной даты (Y-m-d). */
+    public function lastCompletedCheckDateBefore(User $user, string $beforeDate): ?string
+    {
+        $max = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->whereDate('check_date', '<', $beforeDate)
+            ->max('check_date');
+
+        return $max !== null ? (string) $max : null;
     }
 }

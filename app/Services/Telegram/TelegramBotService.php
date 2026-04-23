@@ -189,6 +189,24 @@ class TelegramBotService
         return ['remove_keyboard' => true];
     }
 
+    /** Клавиатура главного меню FitBot (чек-ин, рейтинг, план). */
+    public function fitbotMainMenuKeyboard(): array
+    {
+        return $this->replyKeyboard([
+            [
+                ['text' => 'Чек-ин'],
+                ['text' => 'Рейтинг'],
+                ['text' => '📋 План'],
+            ],
+            [
+                ['text' => '⚙️ Настройки'],
+            ],
+            [
+                ['text' => '👉 Персональный план (AI)'],
+            ],
+        ]);
+    }
+
     public function deleteWebhook(bool $dropPendingUpdates = true): bool
     {
         try {
