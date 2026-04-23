@@ -23,6 +23,9 @@ use Illuminate\Support\Str;
 
 class FitBotService
 {
+    /** @var array{user_id: int, chat_id: int}|null */
+    private ?array $deferredProgressPhotoReminder = null;
+
     public function __construct(
         private readonly TelegramBotService $telegram,
         private readonly PlanGeneratorService $plans,
@@ -42,6 +45,26 @@ class FitBotService
         }
     }
 
+    public function flushDeferredProgressPhotoReminder(): void
+    {
+        if ($this->deferredProgressPhotoReminder === null) {
+            return;
+        }
+        $payload = $this->deferredProgressPhotoReminder;
+        $this->deferredProgressPhotoReminder = null;
+
+        $user = User::query()->find($payload['user_id']);
+        if ($user === null) {
+            return;
+        }
+        $this->maybeRemindProgressPhoto($user, $payload['chat_id']);
+    }
+
+    private function scheduleDeferredProgressPhotoReminder(User $user, int $chatId): void
+    {
+        $this->deferredProgressPhotoReminder = ['user_id' => $user->id, 'chat_id' => $chatId];
+    }
+
     private function handleMessage(array $msg): void
     {
         $chatId = (int) $msg['chat']['id'];
@@ -57,7 +80,7 @@ class FitBotService
         $text = $this->normalizeMessageText((string) ($msg['text'] ?? ''));
         $isCommand = $text !== '' && Str::startsWith($text, '/');
         if (! $isCommand && empty($msg['photo'])) {
-            $this->maybeRemindProgressPhoto($user, $chatId);
+            $this->scheduleDeferredProgressPhotoReminder($user, $chatId);
         }
 
         if ($isCommand) {

@@ -2,6 +2,8 @@
 
 namespace App\Services\Telegram;
 
+use GuzzleHttp\Client;
+use GuzzleHttp\RequestOptions;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -9,6 +11,8 @@ use Throwable;
 
 class TelegramBotService
 {
+    private static ?Client $botJsonClient = null;
+
     public function apiUrl(string $method): string
     {
         $token = (string) config('telegram.bot_token');
@@ -30,6 +34,45 @@ class TelegramBotService
     private function http(): PendingRequest
     {
         return Http::withOptions($this->httpOptions());
+    }
+
+    /**
+     * Один клиент на воркер PHP-FPM: повторное TLS к api.telegram.org не на каждый sendMessage.
+     */
+    private function botJsonClient(): Client
+    {
+        if (self::$botJsonClient !== null) {
+            return self::$botJsonClient;
+        }
+
+        $token = (string) config('telegram.bot_token');
+        $opts = [
+            'base_uri' => 'https://api.telegram.org/bot'.$token.'/',
+            RequestOptions::HTTP_ERRORS => false,
+            RequestOptions::CONNECT_TIMEOUT => 12,
+            RequestOptions::TIMEOUT => 55,
+            RequestOptions::HEADERS => [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ],
+        ];
+
+        $proxy = config('telegram.http_proxy');
+        if (is_string($proxy) && $proxy !== '') {
+            $opts[RequestOptions::PROXY] = $proxy;
+        }
+
+        if (\defined('CURLOPT_TCP_KEEPALIVE')) {
+            $opts['curl'] = [
+                \CURLOPT_TCP_KEEPALIVE => 1,
+                \CURLOPT_TCP_KEEPIDLE => 60,
+                \CURLOPT_TCP_KEEPINTVL => 30,
+            ];
+        }
+
+        self::$botJsonClient = new Client($opts);
+
+        return self::$botJsonClient;
     }
 
     /** @return array<string, mixed>|null */
@@ -220,11 +263,7 @@ class TelegramBotService
     private function post(string $method, array $payload): void
     {
         try {
-            $response = $this->http()
-                ->connectTimeout(12)
-                ->timeout(55)
-                ->asJson()
-                ->post($this->apiUrl($method), $payload);
+            $response = $this->botJsonClient()->post($method, [RequestOptions::JSON => $payload]);
         } catch (Throwable $e) {
             Log::warning('Telegram API exception', [
                 'method' => $method,
@@ -234,22 +273,25 @@ class TelegramBotService
             return;
         }
 
-        if (! $response->successful()) {
+        $status = $response->getStatusCode();
+        $body = (string) $response->getBody();
+
+        if ($status < 200 || $status >= 300) {
             Log::warning('Telegram API error', [
                 'method' => $method,
-                'status' => $response->status(),
-                'body' => $response->body(),
+                'status' => $status,
+                'body' => $body,
             ]);
 
             return;
         }
 
-        $json = $response->json();
-        if (! ($json['ok'] ?? false)) {
+        $json = json_decode($body, true);
+        if (! is_array($json) || ! ($json['ok'] ?? false)) {
             Log::warning('Telegram API ok=false', [
                 'method' => $method,
-                'description' => $json['description'] ?? null,
-                'body' => $response->body(),
+                'description' => is_array($json) ? ($json['description'] ?? null) : null,
+                'body' => $body,
             ]);
         }
     }

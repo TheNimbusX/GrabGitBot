@@ -22,6 +22,10 @@ class TelegramWebhookController extends Controller
             $fitBot->handleUpdate($payload);
         }
 
+        app()->terminating(function () use ($fitBot): void {
+            $fitBot->flushDeferredProgressPhotoReminder();
+        });
+
         return response('OK', 200);
     }
 }
