@@ -16,6 +16,7 @@ Route::prefix('admin')->group(function () {
     Route::middleware('fitbot.admin')->group(function () {
         Route::get('/', [FitbotAdminController::class, 'dashboard'])->name('admin.dashboard');
         Route::post('broadcast', [FitbotAdminController::class, 'broadcast'])->name('admin.broadcast');
+        Route::post('users/{user}/delete', [FitbotAdminController::class, 'destroyUser'])->name('admin.user.destroy');
         Route::post('logout', [FitbotAdminController::class, 'logout'])->name('admin.logout');
     });
 });

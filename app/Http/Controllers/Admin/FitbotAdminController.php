@@ -8,7 +8,10 @@ use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Throwable;
 
 class FitbotAdminController extends Controller
 {
@@ -100,5 +103,51 @@ class FitbotAdminController extends Controller
         $request->session()->forget('fitbot_admin');
 
         return redirect()->route('admin.login');
+    }
+
+    public function destroyUser(Request $request, User $user, TelegramBotService $telegram): RedirectResponse
+    {
+        if ((string) config('telegram.bot_token') === '') {
+            return back()->withErrors(['delete' => 'TELEGRAM_BOT_TOKEN не задан — удаление из Telegram невозможно.']);
+        }
+
+        $request->validate([
+            'confirm_delete' => 'required|accepted',
+        ]);
+
+        $telegramId = (int) $user->telegram_id;
+        $notifyUser = $request->boolean('notify_user');
+
+        try {
+            $telegram->deleteRecordedOutboundMessagesForUser($user);
+        } catch (Throwable $e) {
+            Log::warning('admin purge telegram messages failed', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        if ($notifyUser) {
+            try {
+                $telegram->sendMessage(
+                    $telegramId,
+                    'Аккаунт удалён администратором. Чтобы начать заново, отправь /start.',
+                    null,
+                    null
+                );
+            } catch (Throwable $e) {
+                Log::warning('admin delete user notify failed', [
+                    'user_id' => $user->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Cache::forget('fitbot:account_delete:'.$telegramId);
+
+        $label = $user->first_name ?? (string) $user->id;
+        $user->delete();
+
+        return back()->with('admin_status', "Пользователь {$label} (telegram {$telegramId}) удалён; сообщения бота в чате очищены насколько позволяет Telegram.");
     }
 }

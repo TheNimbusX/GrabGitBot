@@ -482,11 +482,12 @@ class FitBotService
 
             if ($step === 2) {
                 Cache::forget($key);
-                $user->delete();
+                $this->telegram->deleteRecordedOutboundMessagesForUser($user);
                 $this->telegram->sendMessage(
                     $chatId,
                     'Аккаунт удалён. Чтобы начать с чистого листа, отправь /start.'
                 );
+                $user->delete();
 
                 return;
             }
