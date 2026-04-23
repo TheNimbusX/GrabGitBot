@@ -2,8 +2,8 @@
 # Если порты 80/443 заняты (Apache/cPanel), задай CADDY_HTTP_PORT=8080 и CADDY_HTTPS_PORT=8443
 # (у Telegram для вебхука допустимы в т.ч. 443, 80, 88, 8443).
 #
-# Расписание (10:00 мотивация, 20:00 напоминание): сервис scheduler или на хосте cron:
-#   * * * * * docker compose exec -T app php artisan schedule:run
+# Расписание (10:00 / 20:00 по APP_TIMEZONE, по умолчанию МСК): сервис scheduler или cron schedule:run.
+# Без Europe/Moscow в .env вечерний пуш в 20:00 по Москве не совпадёт с dailyAt('20:00').
 
 services:
   caddy:

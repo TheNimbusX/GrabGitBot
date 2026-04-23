@@ -8,6 +8,14 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 class Kernel extends ConsoleKernel
 {
     /**
+     * Часовой пояс для dailyAt / weeklyOn (должен совпадать с config('app.timezone')).
+     */
+    protected function scheduleTimezone(): ?string
+    {
+        return config('app.timezone');
+    }
+
+    /**
      * Define the application's command schedule.
      */
     protected function schedule(Schedule $schedule): void

@@ -70,7 +70,8 @@ return [
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'UTC'),
+    // По умолчанию МСК: иначе dailyAt('20:00') в Kernel — это 20:00 UTC, а не вечер по Москве.
+    'timezone' => env('APP_TIMEZONE', 'Europe/Moscow'),
 
     /*
     |--------------------------------------------------------------------------
