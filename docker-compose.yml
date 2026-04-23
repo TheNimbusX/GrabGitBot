@@ -1,6 +1,9 @@
 # Продакшен: в .env — APP_DOMAIN, APP_URL, DB_HOST=mysql, TELEGRAM_BOT_TOKEN, APP_DEBUG=false.
 # Если порты 80/443 заняты (Apache/cPanel), задай CADDY_HTTP_PORT=8080 и CADDY_HTTPS_PORT=8443
 # (у Telegram для вебхука допустимы в т.ч. 443, 80, 88, 8443).
+#
+# Расписание (10:00 мотивация, 20:00 напоминание): сервис scheduler или на хосте cron:
+#   * * * * * docker compose exec -T app php artisan schedule:run
 
 services:
   caddy:
@@ -40,6 +43,20 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+  # Laravel schedule: без этого (и без cron schedule:run на хосте) утренние/вечерние рассылки не пойдут.
+  scheduler:
+    build: .
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      app:
+        condition: service_started
 
   # Long polling. На РФ-VPS часто нет исходящего доступа к api.telegram.org — нужен TELEGRAM_HTTP_PROXY или VPS за РФ.
   # Вебхук сними вручную с ПК, затем --keep-webhook (иначе при старте будет лишний вызов deleteWebhook).
