@@ -227,11 +227,29 @@
 
     <div class="panel" style="max-width:720px;">
         <h2>Рассылка в Telegram</h2>
-        <p class="hint">Уходит <strong>всем с завершённым онбордингом</strong>. Без HTML, до ~4090 символов.</p>
+        <p class="hint">Без HTML, до ~4090 символов. Сегмент — кому уходит (по умолчанию все с готовым онбордингом).</p>
         <form method="post" action="{{ url('/admin/broadcast') }}">
             @csrf
+            <div class="toolbar" style="margin-bottom:.5rem;">
+                <div>
+                    <label>Сегмент</label>
+                    <select name="segment">
+                        <option value="all_completed" @selected(old('segment', 'all_completed') === 'all_completed')>Онбординг готов — все</option>
+                        <option value="in_onboarding" @selected(old('segment') === 'in_onboarding')>Застряли в онбординге</option>
+                        <option value="active_7d" @selected(old('segment') === 'active_7d')>Активны 7 дней (был чек-ин)</option>
+                        <option value="inactive_7d" @selected(old('segment') === 'inactive_7d')>Готовы, но 7+ дней без чек-ина</option>
+                        <option value="inactive_14d" @selected(old('segment') === 'inactive_14d')>Готовы, но 14+ дней без чек-ина</option>
+                        <option value="new_7d" @selected(old('segment') === 'new_7d')>Новые за 7 дней (любой этап)</option>
+                        <option value="completed_never_checked" @selected(old('segment') === 'completed_never_checked')>Онбординг готов, ни одного чек-ина</option>
+                        <option value="streak_3_plus" @selected(old('segment') === 'streak_3_plus')>Серия чек-инов ≥ 3 дня</option>
+                        <option value="plan_full" @selected(old('segment') === 'plan_full')>Режим плана FitBot</option>
+                        <option value="discipline_only" @selected(old('segment') === 'discipline_only')>Только дисциплина (свой план)</option>
+                        <option value="low_activity_14d" @selected(old('segment') === 'low_activity_14d')>≤ 1 чек-ин за 14 дней</option>
+                    </select>
+                </div>
+            </div>
             <textarea name="message" rows="5" required placeholder="Текст…">{{ old('message') }}</textarea>
-            <button type="submit" style="margin-top:.5rem;">Отправить всем</button>
+            <button type="submit" style="margin-top:.5rem;">Отправить</button>
         </form>
     </div>
 

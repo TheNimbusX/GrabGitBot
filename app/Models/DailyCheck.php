@@ -19,6 +19,7 @@ class DailyCheck extends Model
         'water_ml_actual',
         'total_score',
         'is_completed',
+        'telegram_progress_message_id',
     ];
 
     protected $casts = [

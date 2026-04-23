@@ -31,6 +31,10 @@ class FitbotChurnReminderCommand extends Command
 
         $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $today, &$sentSoft, &$sentHard) {
             foreach ($users as $user) {
+                if (! $user->allowsBotPushAt(Carbon::now(), 'churn')) {
+                    continue;
+                }
+
                 $last = $user->dailyChecks()
                     ->where('is_completed', true)
                     ->max('check_date');

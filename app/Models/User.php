@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\UserPlanMode;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -34,6 +35,13 @@ class User extends Authenticatable
         'water_goal_ml',
         'before_photo_file_id',
         'next_progress_photo_at',
+        'weekly_focus_note',
+        'notify_morning',
+        'notify_evening',
+        'notify_churn',
+        'notify_quiet_enabled',
+        'quiet_hours_start',
+        'quiet_hours_end',
         'password',
     ];
 
@@ -53,6 +61,10 @@ class User extends Authenticatable
         'carbs_g' => 'integer',
         'water_goal_ml' => 'integer',
         'next_progress_photo_at' => 'datetime',
+        'notify_morning' => 'boolean',
+        'notify_evening' => 'boolean',
+        'notify_churn' => 'boolean',
+        'notify_quiet_enabled' => 'boolean',
     ];
 
     public function dailyChecks(): HasMany
@@ -115,5 +127,39 @@ class User extends Authenticatable
         }
 
         return \App\Enums\OnboardingStep::tryFrom($this->onboarding_step);
+    }
+
+    /** Утро / вечер / churn — учитываются флаги и тихие часы (локаль приложения). */
+    public function allowsBotPushAt(Carbon $at, string $kind): bool
+    {
+        $on = match ($kind) {
+            'morning' => (bool) ($this->notify_morning ?? true),
+            'evening' => (bool) ($this->notify_evening ?? true),
+            'churn' => (bool) ($this->notify_churn ?? true),
+            default => true,
+        };
+        if (! $on) {
+            return false;
+        }
+
+        return ! $this->isInQuietHours($at);
+    }
+
+    public function isInQuietHours(Carbon $at): bool
+    {
+        if (! (bool) ($this->notify_quiet_enabled ?? true)) {
+            return false;
+        }
+        $start = (string) ($this->quiet_hours_start ?? '22:00');
+        $end = (string) ($this->quiet_hours_end ?? '08:00');
+        if ($start === $end) {
+            return false;
+        }
+        $t = $at->format('H:i');
+        if ($start < $end) {
+            return $t >= $start && $t < $end;
+        }
+
+        return $t >= $start || $t < $end;
     }
 }

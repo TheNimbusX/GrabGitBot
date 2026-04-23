@@ -33,6 +33,10 @@ class FitbotEveningReminderCommand extends Command
 
         $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $rating, $today, $todayStart, $followUp, &$sent) {
             foreach ($users as $user) {
+                if (! $user->allowsBotPushAt(Carbon::now(), 'evening')) {
+                    continue;
+                }
+
                 $hasToday = $user->dailyChecks()
                     ->whereDate('check_date', $today)
                     ->where('is_completed', true)

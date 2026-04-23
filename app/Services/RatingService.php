@@ -180,6 +180,64 @@ class RatingService
         return $hints ?: ['⚖️ Пока всё в балансе — продолжай в том же духе!'];
     }
 
+    /** Одна строка для чек-ина /rating: свой текст или авто по слабой оси за ~7 дней. */
+    public function weeklyFocusLine(User $user, ?Carbon $now = null): string
+    {
+        $now ??= Carbon::now();
+        $note = $user->weekly_focus_note;
+        if (is_string($note) && trim($note) !== '') {
+            return '🎯 <b>Фокус недели:</b> '.e(trim($note));
+        }
+
+        $from = $now->copy()->subDays(7)->startOfDay();
+        $completedCount = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->where('check_date', '>=', $from->toDateString())
+            ->count();
+
+        if ($completedCount < 2) {
+            return '🎯 <b>Фокус недели:</b> закрепи <b>регулярный чек-ин</b> — тогда станет ясно, что тянуть в первую очередь.';
+        }
+
+        /** @var Collection<int, DailyCheck> $checks */
+        $checks = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->where('check_date', '>=', $from->toDateString())
+            ->get();
+
+        $dimensions = [
+            'diet' => ['label' => 'питание', 'getter' => fn (DailyCheck $c) => $c->diet_rating],
+            'sleep' => ['label' => 'сон', 'getter' => fn (DailyCheck $c) => $c->sleep_rating],
+            'workout' => ['label' => 'тренировки', 'getter' => fn (DailyCheck $c) => $c->workout_rating],
+            'water' => ['label' => 'вода', 'getter' => fn (DailyCheck $c) => $c->water_rating],
+        ];
+
+        $avg = [];
+        foreach ($dimensions as $key => $meta) {
+            $sum = 0;
+            $n = 0;
+            foreach ($checks as $c) {
+                $r = $meta['getter']($c);
+                if ($r !== null) {
+                    $sum += $this->pointsForRating($r);
+                    $n++;
+                }
+            }
+            $avg[$key] = $n > 0 ? $sum / $n : 0.0;
+        }
+
+        asort($avg);
+        $lowestKey = array_key_first($avg);
+        $lowestAvg = $avg[$lowestKey] ?? 0.0;
+        $label = $dimensions[$lowestKey]['label'] ?? 'ритм';
+
+        if ($lowestAvg >= 1.75) {
+            return '🎯 <b>Фокус недели:</b> держи <b>баланс и регулярность</b> — по последним дням оси ровные.';
+        }
+
+        return '🎯 <b>Фокус недели:</b> чуть чаще проседает <b>'.$label.'</b> — имеет смысл присмотреться к этой оси.';
+    }
+
     public function formatSummaryMessage(User $user, ?Carbon $now = null): string
     {
         $s = $this->summary($user, $now);
@@ -193,6 +251,8 @@ class RatingService
             '🔥 Дней в ударе подряд: '.$streak,
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
+            '',
+            $this->weeklyFocusLine($user, $now),
         ];
 
         return implode("\n", $lines);

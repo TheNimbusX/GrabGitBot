@@ -30,6 +30,10 @@ class FitbotMorningMotivationCommand extends Command
 
         $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $dateKey, $now, &$sent) {
             foreach ($users as $user) {
+                if (! $user->allowsBotPushAt($now, 'morning')) {
+                    continue;
+                }
+
                 $dayNum = FitBotMessaging::dayNumberInBot($user, $now);
 
                 if ($dayNum === 7) {

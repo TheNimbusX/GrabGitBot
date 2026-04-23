@@ -135,6 +135,36 @@ class TelegramBotService
         }
     }
 
+    /** @return int|null message_id при успехе */
+    public function sendMessageReturnId(int $chatId, string $text, ?array $replyMarkup = null, ?string $parseMode = 'HTML'): ?int
+    {
+        $payload = [
+            'chat_id' => $chatId,
+            'text' => $text,
+            'parse_mode' => $parseMode,
+        ];
+
+        if ($replyMarkup !== null) {
+            $payload['reply_markup'] = $replyMarkup;
+        }
+        if ($parseMode === null) {
+            unset($payload['parse_mode']);
+        }
+
+        $json = $this->postJson('sendMessage', $payload);
+        if (! is_array($json) || ! ($json['ok'] ?? false)) {
+            return null;
+        }
+        $result = $json['result'] ?? null;
+        if (! is_array($result) || ! isset($result['message_id'])) {
+            return null;
+        }
+        $mid = (int) $result['message_id'];
+        $this->recordOutboundChatMessageIfKnownUser($chatId, $mid);
+
+        return $mid;
+    }
+
     /**
      * Удалить у пользователя сообщения бота, которые мы запомнили (sendMessage).
      * Сообщения пользователя Telegram API не трогает.
@@ -214,7 +244,7 @@ class TelegramBotService
         $this->post('answerCallbackQuery', $payload);
     }
 
-    public function editMessageText(int $chatId, int $messageId, string $text, ?array $replyMarkup = null): void
+    public function editMessageText(int $chatId, int $messageId, string $text, ?array $replyMarkup = null): bool
     {
         $payload = [
             'chat_id' => $chatId,
@@ -225,7 +255,16 @@ class TelegramBotService
         if ($replyMarkup !== null) {
             $payload['reply_markup'] = $replyMarkup;
         }
-        $this->post('editMessageText', $payload);
+        $json = $this->postJson('editMessageText', $payload);
+        if (! is_array($json)) {
+            return false;
+        }
+        if ($json['ok'] ?? false) {
+            return true;
+        }
+        $desc = (string) ($json['description'] ?? '');
+
+        return str_contains($desc, 'message is not modified');
     }
 
     /** @param list<list<array{text: string, callback_data: string}>> $rows */
