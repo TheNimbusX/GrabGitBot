@@ -18,7 +18,7 @@ class UserFactory extends Factory
             'first_name' => fake()->firstName(),
             'last_name' => fake()->lastName(),
             'age' => null,
-            'onboarding_step' => OnboardingStep::AskGender->value,
+            'onboarding_step' => OnboardingStep::AskWelcome->value,
             'weight_kg' => null,
             'height_cm' => null,
             'gender' => null,

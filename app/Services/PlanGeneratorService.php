@@ -70,6 +70,23 @@ class PlanGeneratorService
 
     public function buildPlanMessage(User $user): string
     {
+        if ($user->isDisciplineOnlyMode()) {
+            $lines = [
+                '📋 <b>Режим «свой план»</b>',
+                '',
+                'Ты выбрал бота для <b>дисциплины и чек-инов</b> — без расчёта калорий и меню от FitBot.',
+                '',
+                '💧 <b>Вода</b>: цель <b>'.(int) $user->water_goal_ml.'</b> мл/день',
+                '😴 <b>Сон</b>: цель <b>'.$user->sleep_target_hours.'</b> ч',
+            ];
+            if ($user->height_cm && $user->weight_kg) {
+                $lines[] = '';
+                $lines[] = '📌 В профиле: <b>'.(int) $user->height_cm.'</b> см, <b>'.$user->weight_kg.'</b> кг';
+            }
+
+            return implode("\n", $lines);
+        }
+
         $menu = $this->exampleDayMenu($user);
         $sleep = $user->sleep_target_hours;
         $workout = $this->buildWorkoutBlock($user);

@@ -9,6 +9,7 @@ use App\Enums\FitnessGoal;
 use App\Enums\Gender;
 use App\Enums\OnboardingStep;
 use App\Enums\PhotoType;
+use App\Enums\UserPlanMode;
 use App\Enums\WorkoutCheckVariant;
 use App\Models\DailyCheck;
 use App\Models\Photo;
@@ -217,10 +218,14 @@ class FitBotService
         }
 
         match ($user->onboardingStepEnum()) {
-            OnboardingStep::AskGender => $this->askGender($chatId),
+            OnboardingStep::AskWelcome => $this->sendWelcomeScreen($chatId),
+            OnboardingStep::AskPlanChoice => $this->askPlanChoice($chatId),
+            OnboardingStep::AskGender => $this->askGender($user, $chatId),
             OnboardingStep::AskAge => $this->telegram->sendMessage(
                 $chatId,
-                'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.'
+                $user->isDisciplineOnlyMode()
+                    ? 'Сколько тебе <b>полных лет</b>? Напиши число (например 27).'
+                    : 'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.'
             ),
             OnboardingStep::AskWeight => $this->telegram->sendMessage(
                 $chatId,
@@ -235,7 +240,13 @@ class FitBotService
             OnboardingStep::AskExperience => $this->askExperience($chatId),
             OnboardingStep::AskSleep => $this->telegram->sendMessage(
                 $chatId,
-                'Сколько часов сна в цель? Введи число (например <b>7.5</b>).'
+                $user->isDisciplineOnlyMode()
+                    ? 'Сколько часов <b>сна в сутки</b> хочешь держать в цель? Введи число (например <b>7.5</b>) — для чек-ина.'
+                    : 'Сколько часов сна в цель? Введи число (например <b>7.5</b>).'
+            ),
+            OnboardingStep::AskWaterGoal => $this->telegram->sendMessage(
+                $chatId,
+                '💧 Сколько <b>мл воды в день</b> для твоей цели? (например <b>2500</b> или <b>2.5 л</b>) — от этого считается балл за воду в /check.'
             ),
             OnboardingStep::AskBeforePhoto => $this->telegram->sendMessage(
                 $chatId,
@@ -356,11 +367,11 @@ class FitBotService
             $this->resetProfileForReonboarding($user);
             $this->telegram->sendMessage(
                 $chatId,
-                'Ок, начинаем анкету заново. История чек-инов остаётся; после нового онбординга пересчитаю калории и БЖУ.',
+                'Ок, начинаем заново: снова описание бота и выбор режима. История чек-инов остаётся; для режима «план FitBot» после анкеты снова пересчитаю калории и БЖУ.',
                 $this->telegram->replyKeyboardRemove(),
                 null
             );
-            $this->askGender($chatId);
+            $this->sendWelcomeScreen($chatId);
 
             return;
         }
@@ -476,7 +487,8 @@ class FitBotService
         $user->water_goal_ml = null;
         $user->before_photo_file_id = null;
         $user->next_progress_photo_at = null;
-        $user->onboarding_step = OnboardingStep::AskGender->value;
+        $user->plan_mode = null;
+        $user->onboarding_step = OnboardingStep::AskWelcome->value;
         $user->save();
     }
 
@@ -488,6 +500,27 @@ class FitBotService
         }
         [, $key, $value] = $parts;
 
+        if ($key === 'welcome' && $value === 'continue') {
+            $user->onboarding_step = OnboardingStep::AskPlanChoice->value;
+            $user->save();
+            $this->askPlanChoice($chatId);
+
+            return;
+        }
+
+        if ($key === 'plan') {
+            $mode = UserPlanMode::tryFrom($value);
+            if (! $mode) {
+                return;
+            }
+            $user->plan_mode = $mode->value;
+            $user->onboarding_step = OnboardingStep::AskGender->value;
+            $user->save();
+            $this->askGender($user, $chatId);
+
+            return;
+        }
+
         if ($key === 'gender') {
             $gender = Gender::tryFrom($value);
             if (! $gender) {
@@ -496,10 +529,10 @@ class FitBotService
             $user->gender = $gender->value;
             $user->onboarding_step = OnboardingStep::AskAge->value;
             $user->save();
-            $this->telegram->sendMessage(
-                $chatId,
-                'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.'
-            );
+            $agePrompt = $user->isDisciplineOnlyMode()
+                ? 'Сколько тебе <b>полных лет</b>? Напиши число (например 27).'
+                : 'Сколько тебе <b>полных лет</b>? (число, например 27) — учту в расчёте калорий.';
+            $this->telegram->sendMessage($chatId, $agePrompt);
 
             return;
         }
@@ -556,10 +589,15 @@ class FitBotService
     private function handleOnboardingText(User $user, int $chatId, OnboardingStep $step, string $text): void
     {
         match ($step) {
+            OnboardingStep::AskWelcome, OnboardingStep::AskPlanChoice => $this->telegram->sendMessage(
+                $chatId,
+                '👆 Чтобы продолжить, нажми кнопку под предыдущим сообщением.'
+            ),
             OnboardingStep::AskAge => $this->onboardingAge($user, $chatId, $text),
             OnboardingStep::AskWeight => $this->onboardingWeight($user, $chatId, $text),
             OnboardingStep::AskHeight => $this->onboardingHeight($user, $chatId, $text),
             OnboardingStep::AskSleep => $this->onboardingSleep($user, $chatId, $text),
+            OnboardingStep::AskWaterGoal => $this->onboardingWaterGoal($user, $chatId, $text),
             default => null,
         };
     }
@@ -601,6 +639,16 @@ class FitBotService
             return;
         }
         $user->height_cm = $h;
+        if ($user->isDisciplineOnlyMode()) {
+            $user->onboarding_step = OnboardingStep::AskSleep->value;
+            $user->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                'Сколько часов <b>сна в сутки</b> хочешь держать в цель? Введи число (например <b>7.5</b>) — это нужно для чек-ина.'
+            );
+
+            return;
+        }
         $user->onboarding_step = OnboardingStep::AskActivity->value;
         $user->save();
         $this->askActivity($chatId);
@@ -615,6 +663,16 @@ class FitBotService
             return;
         }
         $user->sleep_target_hours = $s;
+        if ($user->isDisciplineOnlyMode()) {
+            $user->onboarding_step = OnboardingStep::AskWaterGoal->value;
+            $user->save();
+            $this->telegram->sendMessage(
+                $chatId,
+                '💧 Сколько <b>мл воды в день</b> для твоей цели? (например <b>2500</b> или <b>2.5 л</b>) — от этого считается балл за воду в /check.'
+            );
+
+            return;
+        }
         $user->onboarding_step = OnboardingStep::AskBeforePhoto->value;
         $user->save();
         $this->telegram->sendMessage(
@@ -626,11 +684,86 @@ class FitBotService
         );
     }
 
-    private function askGender(int $chatId): void
+    private function onboardingWaterGoal(User $user, int $chatId, string $text): void
+    {
+        $ml = $this->parseWaterMlFromText($text);
+        if ($ml === null || $ml < 400 || $ml > 12000) {
+            $this->telegram->sendMessage(
+                $chatId,
+                '💧 Укажи объём в мл или литрах (например 2500 или 2 л), в диапазоне примерно 400–12000 мл.'
+            );
+
+            return;
+        }
+        $user->water_goal_ml = $ml;
+        $user->save();
+        $this->finishDisciplineOnboarding($user, $chatId);
+    }
+
+    private function finishDisciplineOnboarding(User $user, int $chatId): void
+    {
+        $user->daily_calories_target = null;
+        $user->protein_g = null;
+        $user->fat_g = null;
+        $user->carbs_g = null;
+        $user->activity_level = null;
+        $user->goal = null;
+        $user->experience = null;
+        $user->onboarding_step = null;
+        $user->next_progress_photo_at = Carbon::now()->addDays(30);
+        $user->save();
+
+        $this->telegram->sendMessage($chatId, $this->plans->buildPlanMessage($user));
+        $this->telegram->sendMessage(
+            $chatId,
+            '🎉 <b>Готово!</b> Режим без плана FitBot: каждый день <b>/check</b> ✍️, статистика <b>/rating</b> 📊. Калории и меню ведёшь сам — я помогаю не сбиться с дисциплины.'
+            ."\n".'Раз в ~30 дней могу напомнить про фото прогресса 📷',
+            $this->mainMenuKeyboard()
+        );
+    }
+
+    private function sendWelcomeScreen(int $chatId): void
+    {
+        $text = "👋 <b>Привет! Я FitBot</b>\n\n"
+            ."Я помогаю не терять нить дисциплины:\n"
+            ."• 📝 <b>Чек-ин</b> — питание, сон, движение, вода за день (с баллами)\n"
+            ."• 📊 <b>Рейтинг</b> — серия дней и подсказки\n"
+            ."• 📋 <b>План</b> — твои цели по сну и воде (или полный план от меня)\n"
+            ."• ⏰ Напоминания утром и вечером\n\n"
+            .'Нажми <b>«Продолжить»</b>, чтобы выбрать режим и пройти короткую настройку.';
+
+        $this->telegram->sendMessage(
+            $chatId,
+            $text,
+            $this->telegram->inlineKeyboard([
+                [['text' => '▶️ Продолжить', 'callback_data' => 'onb:welcome:continue']],
+            ])
+        );
+    }
+
+    private function askPlanChoice(int $chatId): void
     {
         $this->telegram->sendMessage(
             $chatId,
-            'Привет! Начнём с <b>пола</b> — от него зависят расчёт калорий, БЖУ и пример тренировок.',
+            '🎯 <b>Какой режим тебе подходит?</b>'."\n\n"
+            .'• <b>План от FitBot</b> — рассчитаю калории, БЖУ, пример дня и блок про тренировки (дольше анкета).'."\n"
+            .'• <b>Свой план</b> — только чек-ины и дисциплина: спрошу сон, воду и базовые данные, без меню и ккал от меня.',
+            $this->telegram->inlineKeyboard([
+                [['text' => '📊 План от FitBot', 'callback_data' => 'onb:plan:'.UserPlanMode::Full->value]],
+                [['text' => '✅ Свой план — только дисциплина', 'callback_data' => 'onb:plan:'.UserPlanMode::Discipline->value]],
+            ])
+        );
+    }
+
+    private function askGender(User $user, int $chatId): void
+    {
+        $intro = $user->isDisciplineOnlyMode()
+            ? 'Начнём с <b>пола</b> — так подсказки будут точнее.'
+            : 'Начнём с <b>пола</b> — от него зависят расчёт калорий, БЖУ и пример тренировок.';
+
+        $this->telegram->sendMessage(
+            $chatId,
+            $intro,
             $this->telegram->inlineKeyboard([
                 [['text' => 'Мужской', 'callback_data' => 'onb:gender:'.Gender::Male->value]],
                 [['text' => 'Женский', 'callback_data' => 'onb:gender:'.Gender::Female->value]],
@@ -693,6 +826,7 @@ class FitBotService
         }
 
         $user->onboarding_step = null;
+        $user->plan_mode = UserPlanMode::Full->value;
         $user->next_progress_photo_at = Carbon::now()->addDays(30);
         $user->save();
 
@@ -970,7 +1104,7 @@ class FitBotService
     {
         $user = User::query()->firstOrNew(['telegram_id' => $telegramId]);
         if (! $user->exists) {
-            $user->onboarding_step = OnboardingStep::AskGender->value;
+            $user->onboarding_step = OnboardingStep::AskWelcome->value;
         }
         $user->username = $from['username'] ?? null;
         $user->first_name = $from['first_name'] ?? null;

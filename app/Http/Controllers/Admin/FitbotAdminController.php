@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\RatingService;
+use App\Services\Telegram\TelegramBotService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -42,11 +43,7 @@ class FitbotAdminController extends Controller
 
     public function dashboard(RatingService $rating): View
     {
-        $completed = User::query()
-            ->where(function ($q) {
-                $q->whereNull('onboarding_step')->orWhere('onboarding_step', '');
-            })
-            ->whereNotNull('daily_calories_target');
+        $completed = User::query()->completedFitbotOnboarding();
 
         $stats = [
             'users_total' => User::query()->count(),
@@ -76,6 +73,26 @@ class FitbotAdminController extends Controller
             });
 
         return view('admin.dashboard', compact('stats', 'rows'));
+    }
+
+    public function broadcast(Request $request, TelegramBotService $telegram): RedirectResponse
+    {
+        $data = $request->validate([
+            'message' => 'required|string|max:4090',
+        ]);
+
+        $text = $data['message'];
+        $n = 0;
+
+        User::query()->completedFitbotOnboarding()->chunkById(80, function ($users) use ($telegram, $text, &$n) {
+            foreach ($users as $user) {
+                $telegram->sendMessage((int) $user->telegram_id, $text, null, null);
+                $n++;
+                usleep(40000);
+            }
+        });
+
+        return back()->with('broadcast_status', "Отправлено пользователям: {$n}");
     }
 
     public function logout(Request $request): RedirectResponse

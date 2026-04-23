@@ -35,6 +35,20 @@
         <div class="stat">В онбординге <strong>{{ $stats['users_in_onboarding'] }}</strong></div>
     </div>
 
+    @if (session('broadcast_status'))
+        <p style="background:#d4edda;padding:.75rem 1rem;border-radius:8px;">{{ session('broadcast_status') }}</p>
+    @endif
+
+    <div style="background:#fff;padding:1rem 1.25rem;border-radius:8px;margin-bottom:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.08);max-width:640px;">
+        <h2 style="font-size:1.05rem;margin:0 0 .75rem;">Рассылка в Telegram</h2>
+        <p style="margin:0 0 .75rem;color:#555;font-size:.9rem;">Текст уйдёт <strong>всем, кто завершил онбординг</strong> (план FitBot или режим «свой план»). Без HTML, до ~4090 символов.</p>
+        <form method="post" action="{{ url('/admin/broadcast') }}">
+            @csrf
+            <textarea name="message" rows="5" style="width:100%;box-sizing:border-box;font-family:inherit;" required placeholder="Текст сообщения…">{{ old('message') }}</textarea>
+            <button type="submit" style="margin-top:.5rem;">Отправить всем</button>
+        </form>
+    </div>
+
     <div style="overflow-x: auto;">
         <table>
             <thead>
@@ -43,6 +57,7 @@
                     <th>Telegram</th>
                     <th>Имя</th>
                     <th>Возраст</th>
+                    <th>Режим</th>
                     <th>Онбординг</th>
                     <th>Серия дней</th>
                     <th>Последний чек-ин</th>
@@ -57,6 +72,7 @@
                         <td>{{ $u->telegram_id }}</td>
                         <td>{{ $u->first_name }} @if($u->username) ({{ '@'.$u->username }}) @endif</td>
                         <td>{{ $u->age ?? '—' }}</td>
+                        <td>@if($u->plan_mode === 'discipline') свой план @elseif($u->plan_mode === 'full' || $u->daily_calories_target) FitBot @else — @endif</td>
                         <td class="{{ $row['onboarding_done'] ? 'ok' : 'no' }}">{{ $row['onboarding_done'] ? 'да' : 'нет' }}</td>
                         <td>{{ $row['streak'] }}</td>
                         <td>{{ $row['last_check'] ? $row['last_check']->format('Y-m-d') : '—' }}</td>

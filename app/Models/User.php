@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\UserPlanMode;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -17,6 +19,7 @@ class User extends Authenticatable
         'last_name',
         'age',
         'onboarding_step',
+        'plan_mode',
         'weight_kg',
         'height_cm',
         'gender',
@@ -64,8 +67,45 @@ class User extends Authenticatable
 
     public function hasCompletedOnboarding(): bool
     {
-        return ($this->onboarding_step === null || $this->onboarding_step === '')
-            && $this->daily_calories_target !== null;
+        if ($this->onboarding_step !== null && $this->onboarding_step !== '') {
+            return false;
+        }
+
+        if ($this->isDisciplineOnlyMode()) {
+            return $this->water_goal_ml !== null && $this->sleep_target_hours !== null;
+        }
+
+        return $this->daily_calories_target !== null;
+    }
+
+    public function isDisciplineOnlyMode(): bool
+    {
+        return $this->plan_mode === UserPlanMode::Discipline->value;
+    }
+
+    /** Полный план бота или старые пользователи без plan_mode, но с калориями. */
+    public function usesGeneratedNutritionPlan(): bool
+    {
+        if ($this->isDisciplineOnlyMode()) {
+            return false;
+        }
+
+        return $this->daily_calories_target !== null;
+    }
+
+    /** Пользователи с завершённым онбордингом (чек-ины / рассылки). */
+    public function scopeCompletedFitbotOnboarding(Builder $query): Builder
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('onboarding_step')->orWhere('onboarding_step', '');
+        })->where(function ($q) {
+            $q->whereNotNull('daily_calories_target')
+                ->orWhere(function ($q2) {
+                    $q2->where('plan_mode', UserPlanMode::Discipline->value)
+                        ->whereNotNull('water_goal_ml')
+                        ->whereNotNull('sleep_target_hours');
+                });
+        });
     }
 
     public function onboardingStepEnum(): ?\App\Enums\OnboardingStep

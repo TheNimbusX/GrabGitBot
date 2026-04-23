@@ -66,10 +66,6 @@ class FitbotEveningReminderCommand extends Command
     /** @return Builder<User> */
     private function completedOnboardingUsers(): Builder
     {
-        return User::query()
-            ->where(function ($q) {
-                $q->whereNull('onboarding_step')->orWhere('onboarding_step', '');
-            })
-            ->whereNotNull('daily_calories_target');
+        return User::query()->completedFitbotOnboarding();
     }
 }

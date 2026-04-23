@@ -15,6 +15,7 @@ Route::prefix('admin')->group(function () {
     Route::post('login', [FitbotAdminController::class, 'login']);
     Route::middleware('fitbot.admin')->group(function () {
         Route::get('/', [FitbotAdminController::class, 'dashboard'])->name('admin.dashboard');
+        Route::post('broadcast', [FitbotAdminController::class, 'broadcast'])->name('admin.broadcast');
         Route::post('logout', [FitbotAdminController::class, 'logout'])->name('admin.logout');
     });
 });
