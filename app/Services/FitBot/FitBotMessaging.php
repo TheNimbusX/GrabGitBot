@@ -436,9 +436,7 @@ final class FitBotMessaging
             ."\n\n"
             .self::fitbotClubTodayAction($user, $rating)
             ."\n\n"
-            .'Закрытый чат: '.self::fitbotClubInviteUrl()
-            ."\n\n"
-            .'Важно: ссылка приглашения технически может пересылаться. Если в чате включена ручная модерация входа, лишних людей можно не принимать.';
+            .'Закрытый чат: '.self::fitbotClubInviteUrl();
     }
 
     public static function fitbotClubActiveWelcome(User $user, RatingService $rating): string
