@@ -283,6 +283,200 @@ class RatingService
         return implode("\n", $lines);
     }
 
+    public function formatFreeAnalyticsPreviewMessage(User $user, ?Carbon $now = null): string
+    {
+        $now ??= Carbon::now();
+        $to = $now->copy()->startOfDay();
+        $from = $to->copy()->subDays(6);
+        if ($user->created_at !== null && $user->created_at->copy()->startOfDay()->gt($from)) {
+            $from = $user->created_at->copy()->startOfDay();
+        }
+        $periodDays = (int) $from->diffInDays($to) + 1;
+
+        /** @var Collection<int, DailyCheck> $checks */
+        $checks = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->whereBetween('check_date', [$from->toDateString(), $to->toDateString()])
+            ->orderBy('check_date')
+            ->get();
+
+        $completedDays = $checks->count();
+        $totalPts = (int) $checks->sum('total_score');
+        $pctMarked = (int) round(100 * $completedDays / max(1, $periodDays));
+
+        $lines = [
+            '📈 <b>Бесплатная аналитика</b>',
+            '<i>Последние 7 дней · '.$from->format('d.m').' - '.$to->format('d.m').'</i>',
+            '',
+            '✅ Чек-инов: <b>'.$completedDays.'</b> из '.$periodDays.' ('.$pctMarked.'%)',
+            '⭐ Баллы: <b>'.$totalPts.'</b> · средний отмеченный день: <b>'.($completedDays > 0 ? round($totalPts / $completedDays, 1) : 0).'</b>/'.self::MAX_DAILY_POINTS,
+            '',
+            ...$this->weakAreasFeedback($user, 7, $now),
+            '',
+            '🏁 <b>В клубе открывается полный контроль:</b>',
+            '• календарь и вес за 30 дней',
+            '• weekly-отчёт со слабым местом недели',
+            '• закрытый чат и задания, чтобы не пропасть после срыва',
+        ];
+
+        return implode("\n", $lines);
+    }
+
+    public function formatClubWeeklyReportMessage(User $user, ?Carbon $now = null): string
+    {
+        $now ??= Carbon::now();
+        $to = $now->copy()->startOfDay();
+        $from = $to->copy()->subDays(6);
+        if ($user->created_at !== null && $user->created_at->copy()->startOfDay()->gt($from)) {
+            $from = $user->created_at->copy()->startOfDay();
+        }
+        $periodDays = (int) $from->diffInDays($to) + 1;
+
+        /** @var Collection<int, DailyCheck> $checks */
+        $checks = $user->dailyChecks()
+            ->where('is_completed', true)
+            ->whereBetween('check_date', [$from->toDateString(), $to->toDateString()])
+            ->orderBy('check_date')
+            ->get();
+
+        $completedDays = $checks->count();
+        $totalPts = (int) $checks->sum('total_score');
+        $avg = $completedDays > 0 ? round($totalPts / $completedDays, 1) : 0;
+        $axisStats = $this->axisStatsForChecks($checks);
+        $weakest = $this->axisReportLine($axisStats, 'weakest');
+        $strongest = $this->axisReportLine($axisStats, 'strongest');
+        $weightLine = $this->weeklyWeightDeltaLine($user, $from, $to);
+
+        $lines = [
+            '🏁 <b>Weekly-отчёт FitBot Club</b>',
+            '<i>'.$from->format('d.m').' - '.$to->format('d.m').'</i>',
+            '',
+            '✅ Чек-инов: <b>'.$completedDays.'</b> из '.$periodDays,
+            '⭐ Баллы: <b>'.$totalPts.'</b> · средний отмеченный день: <b>'.$avg.'</b>/'.self::MAX_DAILY_POINTS,
+        ];
+        if ($weightLine !== null) {
+            $lines[] = '⚖️ '.$weightLine;
+        }
+        $lines = array_merge($lines, [
+            '',
+            '🟢 Сильная сторона: '.$strongest,
+            '🔴 Главный тормоз: '.$weakest,
+            '',
+            '🎯 <b>План на следующую неделю</b>',
+            $this->clubNextWeekAction($weakest),
+            '',
+            'Главная цель клуба - не идеальная неделя, а возврат в учёт после любого плохого дня.',
+        ]);
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  Collection<int, DailyCheck>  $checks
+     * @return list<array{label: string, avg: float, green: int, yellow: int, red: int}>
+     */
+    private function axisStatsForChecks(Collection $checks): array
+    {
+        $axes = [
+            ['label' => 'еда', 'getter' => fn (DailyCheck $c) => $c->diet_rating],
+            ['label' => 'сон', 'getter' => fn (DailyCheck $c) => $c->sleep_rating],
+            ['label' => 'движение', 'getter' => fn (DailyCheck $c) => $c->workout_rating],
+            ['label' => 'вода', 'getter' => fn (DailyCheck $c) => $c->water_rating],
+        ];
+        $stats = [];
+        foreach ($axes as $axis) {
+            $sum = 0;
+            $count = 0;
+            $green = 0;
+            $yellow = 0;
+            $red = 0;
+            foreach ($checks as $check) {
+                $rating = CheckRating::tryFrom((string) $axis['getter']($check));
+                if ($rating === null) {
+                    continue;
+                }
+                $sum += $rating->points();
+                $count++;
+                if ($rating === CheckRating::Green) {
+                    $green++;
+                } elseif ($rating === CheckRating::Yellow) {
+                    $yellow++;
+                } else {
+                    $red++;
+                }
+            }
+            $stats[] = [
+                'label' => $axis['label'],
+                'avg' => $count > 0 ? round($sum / $count, 1) : 0.0,
+                'green' => $green,
+                'yellow' => $yellow,
+                'red' => $red,
+            ];
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @param  list<array{label: string, avg: float, green: int, yellow: int, red: int}>  $stats
+     */
+    private function axisReportLine(array $stats, string $mode): string
+    {
+        if ($stats === []) {
+            return 'пока мало данных';
+        }
+        usort($stats, fn (array $a, array $b) => $a['avg'] <=> $b['avg']);
+        $picked = $mode === 'strongest' ? $stats[array_key_last($stats)] : $stats[0];
+
+        return '<b>'.$picked['label'].'</b> · ср. <b>'.$picked['avg'].'</b>/2'
+            .' · 🟢'.$picked['green'].' 🟡'.$picked['yellow'].' 🔴'.$picked['red'];
+    }
+
+    private function weeklyWeightDeltaLine(User $user, Carbon $from, Carbon $to): ?string
+    {
+        $logs = $user->weightLogs()
+            ->where('created_at', '>=', $from->toDateString())
+            ->where('created_at', '<=', $to->copy()->endOfDay())
+            ->orderBy('created_at')
+            ->get();
+        if ($logs->count() >= 2) {
+            $first = (float) $logs->first()->weight_kg;
+            $last = (float) $logs->last()->weight_kg;
+            $delta = round($last - $first, 1);
+            $sign = $delta > 0 ? '+' : '';
+
+            return 'вес: <b>'.round($first, 1).'</b> → <b>'.round($last, 1).'</b> кг · '.$sign.$delta.' кг';
+        }
+        if ($logs->count() === 1) {
+            $one = $logs->first();
+
+            return 'замер недели: <b>'.round((float) $one->weight_kg, 1).'</b> кг';
+        }
+        if ($user->weight_kg !== null) {
+            return 'текущий вес: <b>'.round((float) $user->weight_kg, 1).'</b> кг · обнови вес раз в неделю';
+        }
+
+        return null;
+    }
+
+    private function clubNextWeekAction(string $weakestLine): string
+    {
+        if (str_contains($weakestLine, 'еда')) {
+            return '🍽 Сделай питание проще: один понятный завтрак/обед, меньше случайных перекусов, чек-ин без самобичевания.';
+        }
+        if (str_contains($weakestLine, 'сон')) {
+            return '😴 Главный рычаг - сон: выбери время отбоя и не пытайся компенсировать усталость сладким.';
+        }
+        if (str_contains($weakestLine, 'движение')) {
+            return '💪 Минимум движения: 2-3 короткие тренировки или прогулки. Цель - вернуться в ритм, не геройствовать.';
+        }
+        if (str_contains($weakestLine, 'вода')) {
+            return '💧 Поставь воду на автопилот: стакан утром, бутылка рядом, отметка вечером по факту.';
+        }
+
+        return '✅ Главная задача - закрывать чек-ин каждый день. Плохой день тоже считается, если он зафиксирован.';
+    }
+
     /**
      * Подряд идущие календарные дни с завершённым чек-ином.
      * Если сегодня ещё не отмечен — счёт начинается с вчера.

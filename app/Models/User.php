@@ -48,6 +48,8 @@ class User extends Authenticatable
         'last_message_to_bot_at',
         'recovery_mode_until',
         'recovery_mode_started_at',
+        'fitbot_club_until',
+        'fitbot_club_founder',
         'password',
     ];
 
@@ -71,6 +73,8 @@ class User extends Authenticatable
         'last_message_to_bot_at' => 'datetime',
         'recovery_mode_until' => 'datetime',
         'recovery_mode_started_at' => 'datetime',
+        'fitbot_club_until' => 'datetime',
+        'fitbot_club_founder' => 'boolean',
         'notify_morning' => 'boolean',
         'notify_evening' => 'boolean',
         'notify_churn' => 'boolean',
@@ -178,6 +182,13 @@ class User extends Authenticatable
         $at ??= Carbon::now();
 
         return $this->recovery_mode_until !== null && $this->recovery_mode_until->greaterThan($at);
+    }
+
+    public function isFitbotClubActive(?Carbon $at = null): bool
+    {
+        $at ??= Carbon::now();
+
+        return $this->fitbot_club_until !== null && $this->fitbot_club_until->greaterThan($at);
     }
 
     public function isInQuietHours(Carbon $at): bool

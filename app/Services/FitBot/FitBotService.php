@@ -108,6 +108,7 @@ class FitBotService
                 '/rating' => $this->cmdRating($user, $chatId),
                 '/plan' => $this->cmdPlan($user, $chatId),
                 '/analytics', '/stats', '/аналитика' => $this->cmdExtendedAnalytics($user, $chatId),
+                '/club', '/pro', '/клуб' => $this->cmdClub($user, $chatId),
                 '/settings', '/настройки', '/setting' => $this->cmdSettings($user, $chatId),
                 '/profile', '/профиль' => $this->cmdProfile($user, $chatId),
                 default => $this->telegram->sendMessage(
@@ -157,11 +158,7 @@ class FitBotService
                     'plan' => $this->cmdPlan($user, $chatId),
                     'settings' => $this->cmdSettings($user, $chatId),
                     'analytics' => $this->cmdExtendedAnalytics($user, $chatId),
-                    'plan_ai' => $this->telegram->sendMessage(
-                        $chatId,
-                        FitBotMessaging::proAiMenuHint(),
-                        $this->mainMenuKeyboard()
-                    ),
+                    'club' => $this->cmdClub($user, $chatId),
                     'support' => $this->cmdSupportStart($user, $chatId),
                     'profile' => $this->cmdProfile($user, $chatId),
                 };
@@ -278,6 +275,12 @@ class FitBotService
             return;
         }
 
+        if ($data === 'menu:club') {
+            $this->cmdClub($user, $chatId);
+
+            return;
+        }
+
         if (str_starts_with($data, 'wt:')) {
             $this->handleWeightUpdateCallback($user, $chatId, $data);
 
@@ -291,12 +294,8 @@ class FitBotService
             return;
         }
 
-        if ($data === 'pay:ai') {
-            $this->telegram->sendMessage(
-                $chatId,
-                FitBotMessaging::proAiCallbackHint(),
-                $this->mainMenuKeyboard()
-            );
+        if (str_starts_with($data, 'club:')) {
+            $this->handleClubCallback($user, $chatId, $data);
 
             return;
         }
@@ -437,8 +436,96 @@ class FitBotService
             return;
         }
 
-        $text = $this->rating->formatExtendedAnalyticsMessage($user);
-        $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
+        if ($user->isFitbotClubActive()) {
+            $text = $this->rating->formatExtendedAnalyticsMessage($user);
+            $this->telegram->sendMessage($chatId, $text, $this->mainMenuKeyboard());
+
+            return;
+        }
+
+        $text = $this->rating->formatFreeAnalyticsPreviewMessage($user);
+        $keyboard = $this->telegram->inlineKeyboard([
+            [['text' => '🏁 Что даёт клуб', 'callback_data' => 'club:offer']],
+            [['text' => 'Хочу в beta-набор', 'callback_data' => 'club:join']],
+        ]);
+        $this->telegram->sendMessage($chatId, $text, $keyboard);
+    }
+
+    private function cmdClub(User $user, int $chatId): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+            return;
+        }
+
+        $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubOffer($user), $this->clubOfferKeyboard($user));
+    }
+
+    private function handleClubCallback(User $user, int $chatId, string $data): void
+    {
+        if (! $user->hasCompletedOnboarding()) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+            return;
+        }
+
+        if ($data === 'club:offer') {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubOffer($user), $this->clubOfferKeyboard($user));
+
+            return;
+        }
+
+        if ($data === 'club:weekly') {
+            if (! $user->isFitbotClubActive()) {
+                $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubPaywall('weekly'), $this->clubOfferKeyboard($user));
+
+                return;
+            }
+
+            $this->telegram->sendMessage($chatId, $this->rating->formatClubWeeklyReportMessage($user), $this->mainMenuKeyboard());
+
+            return;
+        }
+
+        if ($data === 'club:analytics') {
+            if (! $user->isFitbotClubActive()) {
+                $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubPaywall('analytics'), $this->clubOfferKeyboard($user));
+
+                return;
+            }
+
+            $this->cmdExtendedAnalytics($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'club:join') {
+            UserSupportMessage::query()->create([
+                'user_id' => $user->id,
+                'telegram_id' => $user->telegram_id,
+                'body' => 'Хочу в beta-набор FitBot Club: 30 дней контроля похудения без срывов.',
+            ]);
+
+            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubJoinRequested(), $this->mainMenuKeyboard());
+        }
+    }
+
+    private function clubOfferKeyboard(User $user): array
+    {
+        $rows = [
+            [['text' => 'Хочу в beta-набор', 'callback_data' => 'club:join']],
+            [['text' => 'Weekly-отчёт клуба', 'callback_data' => 'club:weekly']],
+            [['text' => 'Полная аналитика 30 дней', 'callback_data' => 'club:analytics']],
+        ];
+        if ($user->isFitbotClubActive()) {
+            $rows = [
+                [['text' => 'Weekly-отчёт клуба', 'callback_data' => 'club:weekly']],
+                [['text' => 'Полная аналитика 30 дней', 'callback_data' => 'club:analytics']],
+            ];
+        }
+
+        return $this->telegram->inlineKeyboard($rows);
     }
 
     private function cmdPlan(User $user, int $chatId): void
@@ -2260,7 +2347,7 @@ class FitBotService
             '📋 План', 'План' => 'plan',
             '⚙️ Настройки', 'Настройки' => 'settings',
             '📈 Расширенная аналитика' => 'analytics',
-            '👉 Персональный план (AI)' => 'plan_ai',
+            '🏁 Клуб 30 дней' => 'club',
             '✉️ Написать в поддержку' => 'support',
             '👤 Профиль' => 'profile',
             default => null,

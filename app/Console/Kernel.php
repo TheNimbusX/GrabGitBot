@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('fitbot:evening-reminder --follow-up')->dailyAt('20:10');
         $schedule->command('fitbot:weekly-focus-reminder')->weeklyOn(1, '9:00');
         $schedule->command('fitbot:weekly-weight-reminder')->weeklyOn(4, '10:00');
+        $schedule->command('fitbot:club-weekly-report')->weeklyOn(1, '10:30');
     }
 
     /**
