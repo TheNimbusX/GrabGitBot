@@ -449,6 +449,7 @@ class RatingService
         $workoutCounts = [
             'trained' => 0,
             'rest' => 0,
+            'recovery' => 0,
             'skipped' => 0,
         ];
         foreach ($checks28 as $c) {
@@ -457,6 +458,8 @@ class RatingService
                 $workoutCounts['trained']++;
             } elseif ($v === WorkoutCheckVariant::Rest) {
                 $workoutCounts['rest']++;
+            } elseif ($v === WorkoutCheckVariant::Recovery) {
+                $workoutCounts['recovery']++;
             } elseif ($v === WorkoutCheckVariant::Skipped) {
                 $workoutCounts['skipped']++;
             }
@@ -516,6 +519,7 @@ class RatingService
             '',
             '💪 <b>Движение</b> (дней): тренировка '.$workoutCounts['trained']
                 .' · отдых '.$workoutCounts['rest']
+                .' · восстановление '.$workoutCounts['recovery']
                 .' · пропуск '.$workoutCounts['skipped'],
             '',
             '<b>Недели (баллы)</b>',

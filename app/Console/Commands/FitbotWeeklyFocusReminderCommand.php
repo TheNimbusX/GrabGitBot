@@ -9,6 +9,7 @@ use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class FitbotWeeklyFocusReminderCommand extends Command
@@ -34,6 +35,10 @@ class FitbotWeeklyFocusReminderCommand extends Command
                 if (! $user->allowsBotPushAt($now, 'weekly_focus')) {
                     continue;
                 }
+                $recentPushKey = "fitbot:push_recent:{$user->id}";
+                if (Cache::has($recentPushKey)) {
+                    continue;
+                }
 
                 $text = $baseText;
                 $streak = $rating->checkInStreakDays($user, $now);
@@ -53,6 +58,7 @@ class FitbotWeeklyFocusReminderCommand extends Command
 
                     continue;
                 }
+                Cache::put($recentPushKey, true, now()->addHours(4));
                 $sent++;
             }
         });

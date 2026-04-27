@@ -50,7 +50,16 @@ class FitbotEveningReminderCommand extends Command
                 $strictKey = "fitbot:evening_strict:{$user->id}:{$today}";
 
                 if ($followUp) {
-                    if (! Cache::has($softKey) || Cache::has($strictKey)) {
+                    $softSentAt = Cache::get($softKey);
+                    if ($softSentAt === null || Cache::has($strictKey)) {
+                        continue;
+                    }
+                    try {
+                        $softSentAt = Carbon::parse((string) $softSentAt);
+                    } catch (\Throwable) {
+                        continue;
+                    }
+                    if ($softSentAt->diffInMinutes(Carbon::now()) < 90) {
                         continue;
                     }
                     $dayNum = FitBotMessaging::dayNumberInBot($user, $todayStart);
@@ -79,8 +88,9 @@ class FitbotEveningReminderCommand extends Command
                 if ($followUp) {
                     Cache::put($strictKey, true, now()->endOfDay());
                 } else {
-                    Cache::put($softKey, true, now()->endOfDay());
+                    Cache::put($softKey, now()->toIso8601String(), now()->endOfDay());
                 }
+                Cache::put("fitbot:push_recent:{$user->id}", true, now()->addHours(4));
                 $sent++;
             }
         });

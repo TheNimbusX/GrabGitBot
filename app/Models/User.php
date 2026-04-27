@@ -46,6 +46,8 @@ class User extends Authenticatable
         'notify_weekly_focus_reminder',
         'notify_weekly_weight_reminder',
         'last_message_to_bot_at',
+        'recovery_mode_until',
+        'recovery_mode_started_at',
         'password',
     ];
 
@@ -67,6 +69,8 @@ class User extends Authenticatable
         'water_goal_ml' => 'integer',
         'next_progress_photo_at' => 'datetime',
         'last_message_to_bot_at' => 'datetime',
+        'recovery_mode_until' => 'datetime',
+        'recovery_mode_started_at' => 'datetime',
         'notify_morning' => 'boolean',
         'notify_evening' => 'boolean',
         'notify_churn' => 'boolean',
@@ -150,6 +154,10 @@ class User extends Authenticatable
     /** Утро / вечер / churn — учитываются флаги и тихие часы (локаль приложения). */
     public function allowsBotPushAt(Carbon $at, string $kind): bool
     {
+        if ($this->isRecoveryModeActive($at)) {
+            return false;
+        }
+
         $on = match ($kind) {
             'morning' => (bool) ($this->notify_morning ?? true),
             'evening' => (bool) ($this->notify_evening ?? true),
@@ -163,6 +171,13 @@ class User extends Authenticatable
         }
 
         return ! $this->isInQuietHours($at);
+    }
+
+    public function isRecoveryModeActive(?Carbon $at = null): bool
+    {
+        $at ??= Carbon::now();
+
+        return $this->recovery_mode_until !== null && $this->recovery_mode_until->greaterThan($at);
     }
 
     public function isInQuietHours(Carbon $at): bool

@@ -34,6 +34,10 @@ class FitbotChurnReminderCommand extends Command
                 if (! $user->allowsBotPushAt(Carbon::now(), 'churn')) {
                     continue;
                 }
+                $recentPushKey = "fitbot:push_recent:{$user->id}";
+                if (Cache::has($recentPushKey)) {
+                    continue;
+                }
 
                 $last = $user->dailyChecks()
                     ->where('is_completed', true)
@@ -80,6 +84,7 @@ class FitbotChurnReminderCommand extends Command
                 }
 
                 Cache::put($cacheKey, true, $ttl);
+                Cache::put($recentPushKey, true, now()->addHours(4));
                 if ($daysSince >= 4) {
                     $sentHard++;
                 } else {

@@ -10,6 +10,7 @@ use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class FitbotMorningMotivationCommand extends Command
@@ -33,6 +34,10 @@ class FitbotMorningMotivationCommand extends Command
         $this->completedOnboardingUsers()->chunkById(100, function ($users) use ($telegram, $rating, $dateKey, $now, &$sent) {
             foreach ($users as $user) {
                 if (! $user->allowsBotPushAt($now, 'morning')) {
+                    continue;
+                }
+                $recentPushKey = "fitbot:push_recent:{$user->id}";
+                if (Cache::has($recentPushKey)) {
                     continue;
                 }
 
@@ -83,6 +88,7 @@ class FitbotMorningMotivationCommand extends Command
 
                     continue;
                 }
+                Cache::put($recentPushKey, true, now()->addHours(4));
                 $sent++;
             }
         });

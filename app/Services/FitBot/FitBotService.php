@@ -547,6 +547,8 @@ class FitBotService
     private function settingsMenuKeyboard(): array
     {
         return $this->telegram->inlineKeyboard([
+            [['text' => '⚖️ Обновить вес', 'callback_data' => 'wt:start']],
+            [['text' => '🤒 Болею / восстановление', 'callback_data' => 'set:recovery:menu']],
             [['text' => '✏️ Сменить анкету', 'callback_data' => 'set:edit']],
             [['text' => '🔔 Уведомления', 'callback_data' => 'set:notif:menu']],
             [['text' => '📌 Фокус недели', 'callback_data' => 'set:focus:menu']],
@@ -733,6 +735,20 @@ class FitBotService
             return;
         }
 
+        if ($data === 'set:recovery:menu') {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->sendRecoveryModePanel($user, $chatId);
+
+            return;
+        }
+
+        if (str_starts_with($data, 'set:recovery:')) {
+            Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
+            $this->handleRecoveryModeCallback($user, $chatId, $data);
+
+            return;
+        }
+
         if ($data === 'set:focus:close') {
             Cache::forget($this->deleteAccountCacheKey($user->telegram_id));
             $this->telegram->sendMessage(
@@ -862,7 +878,7 @@ class FitBotService
             'weekly_focus' => (bool) $user->notify_weekly_focus_reminder,
             'weekly_weight' => (bool) $user->notify_weekly_weight_reminder,
             'quiet' => (bool) $user->notify_quiet_enabled,
-        ], (string) $user->quiet_hours_start, (string) $user->quiet_hours_end);
+        ], (string) $user->quiet_hours_start, (string) $user->quiet_hours_end, $user->recovery_mode_until);
 
         $markup = $this->telegram->inlineKeyboard([
             [
@@ -893,6 +909,65 @@ class FitBotService
             return;
         }
         $this->telegram->sendMessage($chatId, $text, $markup);
+    }
+
+    private function sendRecoveryModePanel(User $user, int $chatId): void
+    {
+        $user->refresh();
+        $this->telegram->sendMessage(
+            $chatId,
+            FitBotMessaging::recoveryModeMenuTitle($user->recovery_mode_until),
+            $this->telegram->inlineKeyboard([
+                [
+                    ['text' => '1 день', 'callback_data' => 'set:recovery:1'],
+                    ['text' => '3 дня', 'callback_data' => 'set:recovery:3'],
+                    ['text' => '7 дней', 'callback_data' => 'set:recovery:7'],
+                ],
+                [['text' => 'Выключить', 'callback_data' => 'set:recovery:off']],
+                [['text' => '◀️ В настройки', 'callback_data' => 'set:focus:close']],
+            ])
+        );
+    }
+
+    private function handleRecoveryModeCallback(User $user, int $chatId, string $data): void
+    {
+        $value = substr($data, strlen('set:recovery:'));
+        if ($value === 'off') {
+            $user->recovery_mode_until = null;
+            $user->recovery_mode_started_at = null;
+            $user->save();
+            $this->telegram->sendMessage($chatId, FitBotMessaging::recoveryModeDisabled(), $this->settingsMenuKeyboard());
+
+            return;
+        }
+
+        $days = (int) $value;
+        if (! in_array($days, [1, 3, 7], true)) {
+            return;
+        }
+
+        $until = Carbon::now()->addDays($days)->endOfDay();
+        $user->recovery_mode_started_at = Carbon::now();
+        $user->recovery_mode_until = $until;
+        $user->save();
+        $this->telegram->sendMessage(
+            $chatId,
+            FitBotMessaging::recoveryModeEnabled($until),
+            $this->mainMenuKeyboard()
+        );
+    }
+
+    private function ensureShortRecoveryMode(User $user): void
+    {
+        $until = Carbon::now()->addDay()->endOfDay();
+        if ($user->recovery_mode_until !== null && $user->recovery_mode_until->greaterThanOrEqualTo($until)) {
+            return;
+        }
+        if ($user->recovery_mode_started_at === null) {
+            $user->recovery_mode_started_at = Carbon::now();
+        }
+        $user->recovery_mode_until = $until;
+        $user->save();
     }
 
     private function deleteAccountCacheKey(int $telegramId): string
@@ -1588,10 +1663,13 @@ class FitBotService
             }
             $check->workout_variant = $variant->value;
             $check->workout_rating = match ($variant) {
-                WorkoutCheckVariant::Trained, WorkoutCheckVariant::Rest => CheckRating::Green->value,
+                WorkoutCheckVariant::Trained, WorkoutCheckVariant::Rest, WorkoutCheckVariant::Recovery => CheckRating::Green->value,
                 WorkoutCheckVariant::Skipped => CheckRating::Red->value,
             };
             $check->save();
+            if ($variant === WorkoutCheckVariant::Recovery) {
+                $this->ensureShortRecoveryMode($user);
+            }
             $this->finalizeOrContinueCheck($user, $chatId, $check);
 
             return;
@@ -1673,6 +1751,9 @@ class FitBotService
                 $blocks[] = FitBotMessaging::comebackHead();
             }
             $blocks[] = FitBotMessaging::completedCheckClosing($check, $this->rating);
+            if (WorkoutCheckVariant::tryFrom((string) $check->workout_variant) === WorkoutCheckVariant::Recovery) {
+                $blocks[] = FitBotMessaging::recoveryCheckClosing();
+            }
             $streakLine = FitBotMessaging::streakCelebrationLine($streak);
             if ($streakLine !== null) {
                 $blocks[] = $streakLine;
@@ -2009,6 +2090,7 @@ class FitBotService
         return $this->telegram->inlineKeyboard([
             [['text' => '💪 Позанимался', 'callback_data' => $p.WorkoutCheckVariant::Trained->value]],
             [['text' => '😴 День отдыха', 'callback_data' => $p.WorkoutCheckVariant::Rest->value]],
+            [['text' => '🤒 Болею / восстановление', 'callback_data' => $p.WorkoutCheckVariant::Recovery->value]],
             [['text' => '❌ Прогулял (пропустил тренировку)', 'callback_data' => $p.WorkoutCheckVariant::Skipped->value]],
             [['text' => '◀️ Назад', 'callback_data' => 'chk:'.$checkId.':back']],
             [['text' => '❌ Отменить чек-ин', 'callback_data' => 'chk:'.$checkId.':cancel']],
@@ -2208,6 +2290,8 @@ class FitBotService
 
         $text = FitBotMessaging::profileMessage($user, $this->rating, $streak, $tier);
         $kb = $this->telegram->inlineKeyboard([
+            [['text' => '⚖️ Обновить вес', 'callback_data' => 'wt:start']],
+            [['text' => '🤒 Болею / восстановление', 'callback_data' => 'set:recovery:menu']],
             [['text' => 'ℹ️ Как устроены статусы', 'callback_data' => 'profile:status_help']],
         ]);
         $this->telegram->sendMessage($chatId, $text, $kb);
