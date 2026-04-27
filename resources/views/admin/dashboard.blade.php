@@ -892,6 +892,8 @@
             'plan_full' => 'Режим плана FitBot',
             'discipline_only' => 'Только дисциплина (свой план)',
             'low_activity_14d' => '≤ 1 чек-ин за 14 дней',
+            'club_active' => 'FitBot Club активен',
+            'club_expired' => 'FitBot Club истёк',
         ];
         $pulseLabels = [
             'hot' => 'В теме (чек-ин сегодня/вчера)',
@@ -969,6 +971,9 @@
             @if ($errors->has('delete'))
                 <p class="flash flash-err">{{ $errors->first('delete') }}</p>
             @endif
+            @if ($errors->has('club'))
+                <p class="flash flash-err">{{ $errors->first('club') }}</p>
+            @endif
 
             <section class="section" id="metrics">
                 <div class="section-head">
@@ -1043,6 +1048,12 @@
                             @endif
                             · <a href="#support" style="color:var(--cyan);text-decoration:none;font-weight:700;">открыть ↓</a>
                         </div>
+                    </div>
+                    <div class="mini-kpi">
+                        <div class="mk-ic">🏁</div>
+                        <strong>{{ $stats['fitbot_club_active'] ?? 0 }}</strong>
+                        <div class="mk-label">FitBot Club</div>
+                        <div class="mk-sub">активных подписок</div>
                     </div>
                 </div>
             </section>
@@ -1204,6 +1215,16 @@
                                                             </form>
                                                         @endif
                                                     @endif
+                                                    @if ($su && $clubColumnExists)
+                                                        <form class="inline" method="post" action="{{ route('admin.user.club', $su) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="action" value="activate">
+                                                            <input type="hidden" name="days" value="30">
+                                                            <input type="hidden" name="founder" value="1">
+                                                            <input type="hidden" name="notify_user" value="1">
+                                                            <button type="submit" class="btn-mini btn-mini--primary">Club +30</button>
+                                                        </form>
+                                                    @endif
                                                     <form class="inline" method="post" action="{{ route('admin.support.destroy', $sm) }}" onsubmit="return confirm('Удалить обращение навсегда?');">
                                                         @csrf
                                                         <button type="submit" class="btn-mini btn-mini--danger">Удалить</button>
@@ -1241,6 +1262,10 @@
                                 <option value="inactive14" @selected($filters['filter'] === 'inactive14')>Готовы, без чек-ина 14 дней</option>
                                 <option value="never_checked" @selected($filters['filter'] === 'never_checked')>Готовы, ни одного чек-ина</option>
                                 <option value="low_activity_14d" @selected($filters['filter'] === 'low_activity_14d')>≤ 1 чек-ин за 14 дней</option>
+                                @if ($clubColumnExists)
+                                    <option value="club_active" @selected($filters['filter'] === 'club_active')>FitBot Club активен</option>
+                                    <option value="club_expired" @selected($filters['filter'] === 'club_expired')>FitBot Club истёк</option>
+                                @endif
                                 <option value="new7" @selected($filters['filter'] === 'new7')>Новые за 7 дней</option>
                             </select>
                         </div>
@@ -1276,6 +1301,7 @@
                                     <th class="num">Возраст</th>
                                     <th class="num">Вес</th>
                                     <th>План</th>
+                                    <th>Club</th>
                                     <th>Онбординг</th>
                                     <th class="num">Чек-ины</th>
                                     <th class="num">Баллы ∑</th>
@@ -1322,6 +1348,27 @@
                                                 <span class="pill pill-full">FitBot</span>
                                             @else
                                                 <span class="pill">—</span>
+                                            @endif
+                                        </td>
+                                        <td data-label="Club">
+                                            @if (! $clubColumnExists)
+                                                <span class="no">миграция</span>
+                                            @elseif ($row['club_active'])
+                                                <span class="pill pill-full">активен</span>
+                                                <div class="no" style="font-size:.72rem;margin-top:.2rem;">
+                                                    до {{ $row['club_until']?->format('d.m.Y') }}
+                                                    @if ($row['club_days_left'] !== null)
+                                                        · {{ $row['club_days_left'] }} дн.
+                                                    @endif
+                                                    @if ($row['club_founder'])
+                                                        · founder
+                                                    @endif
+                                                </div>
+                                            @elseif ($row['club_until'])
+                                                <span class="pill">истёк</span>
+                                                <div class="no" style="font-size:.72rem;margin-top:.2rem;">{{ $row['club_until']?->format('d.m.Y') }}</div>
+                                            @else
+                                                <span class="no">—</span>
                                             @endif
                                         </td>
                                         <td class="{{ $row['onboarding_done'] ? 'ok' : 'no' }}" data-label="Онбординг">{{ $row['onboarding_done'] ? 'да' : 'нет' }}</td>
@@ -1379,6 +1426,36 @@
                                         <td class="num no" data-label="Дней в боте">{{ $row['days_in_bot'] !== null ? $row['days_in_bot'] : '—' }}</td>
                                         <td class="no" data-label="Создан">{{ $u->created_at?->format('Y-m-d H:i') }}</td>
                                         <td data-label="Действия">
+                                            @if ($clubColumnExists)
+                                                <details class="danger-zone">
+                                                    <summary>Club…</summary>
+                                                    <form method="post" action="{{ route('admin.user.club', $u) }}">
+                                                        @csrf
+                                                        <input type="hidden" name="action" value="{{ $row['club_active'] ? 'extend' : 'activate' }}">
+                                                        <label class="hint" style="display:block;margin-top:.35rem;">Дней</label>
+                                                        <input type="number" name="days" value="30" min="1" max="365" style="width:82px;">
+                                                        <label style="display:flex;gap:.4rem;align-items:flex-start;margin:.4rem 0;">
+                                                            <input type="hidden" name="founder" value="0">
+                                                            <input type="checkbox" name="founder" value="1" @checked($row['club_founder'])>
+                                                            <span>founder</span>
+                                                        </label>
+                                                        <label style="display:flex;gap:.4rem;align-items:flex-start;margin:.4rem 0;">
+                                                            <input type="hidden" name="notify_user" value="0">
+                                                            <input type="checkbox" name="notify_user" value="1" checked>
+                                                            <span>уведомить</span>
+                                                        </label>
+                                                        <button type="submit" class="btn" style="margin-top:.25rem;">{{ $row['club_active'] ? 'Продлить' : 'Активировать' }}</button>
+                                                    </form>
+                                                    @if ($row['club_active'] || $row['club_until'])
+                                                        <form method="post" action="{{ route('admin.user.club', $u) }}" style="margin-top:.45rem;" onsubmit="return confirm('Отключить FitBot Club пользователю?');">
+                                                            @csrf
+                                                            <input type="hidden" name="action" value="disable">
+                                                            <input type="hidden" name="notify_user" value="1">
+                                                            <button type="submit" class="btn-mini btn-mini--danger">Отключить Club</button>
+                                                        </form>
+                                                    @endif
+                                                </details>
+                                            @endif
                                             <details class="danger-zone">
                                                 <summary>Удалить…</summary>
                                                 <form method="post" action="{{ route('admin.user.destroy', $u) }}">

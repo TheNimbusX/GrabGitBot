@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Throwable;
 
@@ -68,6 +69,7 @@ class FitbotAdminController extends Controller
             'plan_full',
             'discipline_only',
             'low_activity_14d',
+            'club_active',
         ];
     }
 
@@ -219,6 +221,7 @@ class FitbotAdminController extends Controller
                 '(select count(*) from daily_checks where daily_checks.user_id = users.id and is_completed = 1 and check_date >= ?) <= 1',
                 [$since14]
             ),
+            'club_active' => Schema::hasColumn('users', 'fitbot_club_until') ? $q->where('fitbot_club_until', '>', now()) : null,
             default => null,
         };
     }
@@ -274,6 +277,65 @@ class FitbotAdminController extends Controller
         $user->delete();
 
         return back()->with('admin_status', "Пользователь {$label} (telegram {$telegramId}) удалён; сообщения бота в чате очищены насколько позволяет Telegram.");
+    }
+
+    public function updateClub(Request $request, User $user, TelegramBotService $telegram): RedirectResponse
+    {
+        if (! Schema::hasColumn('users', 'fitbot_club_until')) {
+            return back()->withErrors(['club' => 'Сначала выполни миграцию для FitBot Club: php artisan migrate.']);
+        }
+
+        $data = $request->validate([
+            'action' => 'required|string|in:activate,extend,disable',
+            'days' => 'nullable|integer|min:1|max:365',
+            'founder' => 'nullable|boolean',
+            'notify_user' => 'nullable|boolean',
+        ]);
+
+        $days = (int) ($data['days'] ?? 30);
+        $label = trim((string) ($user->first_name ?? '')) !== '' ? $user->first_name : '#'.$user->id;
+
+        if ($data['action'] === 'disable') {
+            $user->fitbot_club_until = null;
+            $user->fitbot_club_founder = false;
+            $user->save();
+
+            if ($request->boolean('notify_user')) {
+                $this->tryNotifyClubChange($telegram, $user, '🏁 FitBot Club отключён. Базовые функции бота остаются доступны.');
+            }
+
+            return back()->with('admin_status', "FitBot Club отключён для {$label}.");
+        }
+
+        $base = $data['action'] === 'extend' && $user->fitbot_club_until !== null && $user->fitbot_club_until->isFuture()
+            ? $user->fitbot_club_until->copy()
+            : now();
+        $user->fitbot_club_until = $base->addDays($days);
+        $user->fitbot_club_founder = $request->boolean('founder', (bool) $user->fitbot_club_founder);
+        $user->save();
+
+        if ($request->boolean('notify_user')) {
+            $this->tryNotifyClubChange(
+                $telegram,
+                $user,
+                '🏁 FitBot Club активирован до <b>'.$user->fitbot_club_until->format('d.m.Y').'</b>.'."\n\n"
+                    .'Открыты weekly-отчёт, полная аналитика и клубный контроль.'
+            );
+        }
+
+        return back()->with('admin_status', "FitBot Club активен для {$label} до ".$user->fitbot_club_until->format('Y-m-d H:i').'.');
+    }
+
+    private function tryNotifyClubChange(TelegramBotService $telegram, User $user, string $text): void
+    {
+        try {
+            $telegram->sendMessage((int) $user->telegram_id, $text, null, 'HTML');
+        } catch (Throwable $e) {
+            Log::warning('admin club notify failed', [
+                'user_id' => $user->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function markSupportRead(UserSupportMessage $supportMessage): RedirectResponse

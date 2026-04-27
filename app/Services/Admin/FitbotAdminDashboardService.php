@@ -32,6 +32,7 @@ class FitbotAdminDashboardService
         $q = trim((string) $request->query('q', ''));
         $filter = (string) $request->query('filter', 'all');
         $sort = (string) $request->query('sort', 'id_desc');
+        $clubColumnExists = Schema::hasColumn('users', 'fitbot_club_until');
 
         $userQuery = User::query()
             ->when($q !== '', function ($query) use ($q) {
@@ -79,6 +80,10 @@ class FitbotAdminDashboardService
                 '(select count(*) from daily_checks where daily_checks.user_id = users.id and is_completed = 1 and check_date >= ?) <= 1',
                 [$since14]
             );
+        } elseif ($filter === 'club_active' && $clubColumnExists) {
+            $userQuery->where('fitbot_club_until', '>', $now);
+        } elseif ($filter === 'club_expired' && $clubColumnExists) {
+            $userQuery->whereNotNull('fitbot_club_until')->where('fitbot_club_until', '<=', $now);
         }
 
         $userQuery
@@ -104,7 +109,7 @@ class FitbotAdminDashboardService
         $userIds = $users->pluck('id')->all();
         $datesByUserId = $this->loadCompletedCheckDatesByUser($userIds);
 
-        $rows = $users->map(function (User $user) use ($datesByUserId, $now) {
+        $rows = $users->map(function (User $user) use ($datesByUserId, $now, $clubColumnExists) {
             $dateRows = $datesByUserId->get($user->id, collect());
             $dateStrings = $dateRows->map(function ($r) {
                 $d = $r->check_date;
@@ -149,6 +154,12 @@ class FitbotAdminDashboardService
                 'days_since_message_to_bot' => $user->last_message_to_bot_at !== null
                     ? (int) $user->last_message_to_bot_at->copy()->startOfDay()->diffInDays($now->copy()->startOfDay())
                     : null,
+                'club_active' => $clubColumnExists && $user->isFitbotClubActive($now),
+                'club_until' => $clubColumnExists ? $user->fitbot_club_until : null,
+                'club_days_left' => $clubColumnExists && $user->fitbot_club_until !== null && $user->fitbot_club_until->isFuture()
+                    ? (int) $now->copy()->startOfDay()->diffInDays($user->fitbot_club_until->copy()->startOfDay()) + 1
+                    : null,
+                'club_founder' => $clubColumnExists && (bool) $user->fitbot_club_founder,
             ];
         });
 
@@ -203,6 +214,7 @@ class FitbotAdminDashboardService
             'supportMessagesTotal' => $supportMessagesTotal,
             'supportUnreadCount' => $supportUnreadCount,
             'supportHasReadAt' => $supportHasReadAt,
+            'clubColumnExists' => $clubColumnExists,
         ];
     }
 
@@ -276,6 +288,9 @@ class FitbotAdminDashboardService
                 $q->where('is_completed', true);
             })
             ->count();
+        $clubActive = Schema::hasColumn('users', 'fitbot_club_until')
+            ? (int) User::query()->where('fitbot_club_until', '>', $now)->count()
+            : 0;
 
         $engagementOfCompletedPct = $usersCompletedN > 0
             ? round(100 * $usersActive7AmongCompleted / $usersCompletedN, 1)
@@ -299,6 +314,7 @@ class FitbotAdminDashboardService
             'users_dormant_7d_completed' => $usersDormant7,
             'users_dormant_14d_completed' => $usersDormant14,
             'users_completed_never_checked' => $usersNeverChecked,
+            'fitbot_club_active' => $clubActive,
             'engagement_completed_7d_pct' => $engagementOfCompletedPct,
             'photos_total' => $photosTotal,
             'telegram_logged_messages' => $loggedMsgs,
