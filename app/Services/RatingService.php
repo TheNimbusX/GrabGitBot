@@ -410,6 +410,7 @@ class RatingService
             ->orderBy('check_date')
             ->get();
         $checksByDate = $checks30->keyBy(fn (DailyCheck $c) => $c->check_date->toDateString());
+        $weightByDate = $this->weightByDateForPeriod($user, $from, $to);
 
         if ($checks30->isEmpty()) {
             return "📈 <b>Расширенная аналитика</b>\n\n"
@@ -497,12 +498,12 @@ class RatingService
             'Пропуски движения: '.$this->formatDateList($skippedWorkoutDates),
             '',
             '━━━ <b>Календарь периода</b>',
-            '<i>еда · сон · движение · вода · сумма</i>',
+            '<i>еда · сон · движение · вода · сумма · вес</i>',
         ]);
         for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
             /** @var DailyCheck|null $check */
             $check = $checksByDate->get($day->toDateString());
-            $lines[] = $this->calendarLineForDay($day, $check);
+            $lines[] = $this->calendarLineForDay($day, $check, $weightByDate[$day->toDateString()] ?? null);
         }
 
         $lines = array_merge($lines, $this->extendedAnalyticsWeightLines($user));
@@ -557,11 +558,37 @@ class RatingService
         return implode(', ', $shown).$suffix;
     }
 
-    private function calendarLineForDay(Carbon $day, ?DailyCheck $check): string
+    /**
+     * @return array<string, float>
+     */
+    private function weightByDateForPeriod(User $user, Carbon $from, Carbon $to): array
+    {
+        $weights = [];
+        if ($user->starting_weight_kg !== null && $user->created_at !== null) {
+            $registrationDay = $user->created_at->copy()->startOfDay();
+            if ($registrationDay->betweenIncluded($from, $to)) {
+                $weights[$registrationDay->toDateString()] = (float) $user->starting_weight_kg;
+            }
+        }
+
+        $logs = $user->weightLogs()
+            ->where('created_at', '>=', $from->toDateString())
+            ->where('created_at', '<=', $to->copy()->endOfDay())
+            ->orderBy('created_at')
+            ->get();
+        foreach ($logs as $log) {
+            $weights[$log->created_at->toDateString()] = (float) $log->weight_kg;
+        }
+
+        return $weights;
+    }
+
+    private function calendarLineForDay(Carbon $day, ?DailyCheck $check, ?float $weightKg = null): string
     {
         $date = '<code>'.$day->format('d.m').'</code>';
+        $weight = $this->calendarWeightSuffix($weightKg);
         if ($check === null) {
-            return $date.' — чек-ин не закрыт';
+            return $date.' — чек-ин не закрыт'.$weight;
         }
         $workout = WorkoutCheckVariant::tryFrom((string) $check->workout_variant);
 
@@ -570,7 +597,17 @@ class RatingService
             .' · сон '.$this->ratingDot($check->sleep_rating)
             .' · движение '.$this->workoutMark($workout)
             .' · вода '.$this->ratingDot($check->water_rating)
-            .' = <b>'.(int) $check->total_score.'</b>';
+            .' = <b>'.(int) $check->total_score.'</b>'
+            .$weight;
+    }
+
+    private function calendarWeightSuffix(?float $weightKg): string
+    {
+        if ($weightKg === null) {
+            return '';
+        }
+
+        return ' · вес: <b>'.round($weightKg, 1).'</b> кг';
     }
 
     private function ratingDot(?string $rating): string
