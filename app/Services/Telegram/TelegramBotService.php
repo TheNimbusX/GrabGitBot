@@ -237,6 +237,33 @@ class TelegramBotService
         }
     }
 
+    public function removeUserFromChat(int|string $chatId, int $telegramUserId): bool
+    {
+        $json = $this->postJson('banChatMember', [
+            'chat_id' => $chatId,
+            'user_id' => $telegramUserId,
+            'revoke_messages' => false,
+        ]);
+        if (! is_array($json) || ! ($json['ok'] ?? false)) {
+            Log::warning('Telegram banChatMember failed', [
+                'chat_id' => $chatId,
+                'user_id' => $telegramUserId,
+                'body' => $json,
+            ]);
+
+            return false;
+        }
+
+        // Сразу снимаем бан, чтобы пользователь смог вернуться после новой активации CLUB.
+        $this->postJson('unbanChatMember', [
+            'chat_id' => $chatId,
+            'user_id' => $telegramUserId,
+            'only_if_banned' => true,
+        ]);
+
+        return true;
+    }
+
     private function recordOutboundChatMessageIfKnownUser(int $chatId, int $messageId): void
     {
         $user = User::query()->where('telegram_id', $chatId)->first();

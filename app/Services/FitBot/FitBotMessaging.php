@@ -467,6 +467,41 @@ final class FitBotMessaging
         return (string) config('fitbot.club_invite_url', 'https://t.me/+3o_GirDWRE9lNDRi');
     }
 
+    public static function referralInviteText(User $user): string
+    {
+        return '🤝 <b>Пригласи друга</b>'."\n\n"
+            .'Друг получает <b>7 дней CLUB</b> сразу по твоей ссылке.'."\n"
+            .'Ты получаешь <b>+7 дней CLUB</b>, когда он пройдёт анкету и закроет первый чек-ин.'
+            ."\n\n"
+            .'Максимум: <b>4 друга</b> на пользователя.'
+            ."\n\n"
+            .self::referralLinkLine($user);
+    }
+
+    public static function referralRewardForReferrer(User $friend, User $referrer): string
+    {
+        $name = trim((string) ($friend->first_name ?? 'друг'));
+        if ($name === '') {
+            $name = 'друг';
+        }
+
+        return '🤝 <b>Реферальный бонус</b>'."\n\n"
+            .e($name).' закрыл первый чек-ин. Тебе начислено <b>+7 дней CLUB</b>.'
+            ."\n\n"
+            .'CLUB активен до <b>'.$referrer->fitbot_club_until?->format('d.m.Y').'</b>.';
+    }
+
+    private static function referralLinkLine(User $user): string
+    {
+        $bot = trim((string) config('fitbot.bot_username'));
+        if ($bot === '') {
+            return 'Твой код: <code>ref_'.$user->id.'</code>'."\n"
+                .'Для полноценной ссылки укажи <code>FITBOT_BOT_USERNAME</code> в .env.';
+        }
+
+        return 'Твоя ссылка: https://t.me/'.$bot.'?start=ref_'.$user->id;
+    }
+
     public static function weeklyFocusSavedAfterText(): string
     {
         return 'Записал <b>фокус недели</b> - строка в конце <b>/rating</b> и после чек-ина.';

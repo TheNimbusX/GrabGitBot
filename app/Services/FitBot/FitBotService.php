@@ -22,6 +22,7 @@ use App\Services\RatingService;
 use App\Services\Telegram\TelegramBotService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class FitBotService
@@ -101,7 +102,14 @@ class FitBotService
 
                 return;
             }
+            if ($command === '/start') {
+                $this->captureReferralFromStartPayload($user, $text);
+            }
             match ($command) {
+                '/club_chat_id', '/chatid' => $this->telegram->sendMessage(
+                    $chatId,
+                    "Club chat id:\n<code>".$chatId.'</code>'
+                ),
                 '/start' => $this->cmdStart($user, $chatId),
                 '/check' => $this->cmdCheck($user, $chatId),
                 '/cancel' => $this->cmdCancelCheck($user, $chatId),
@@ -265,6 +273,17 @@ class FitBotService
 
         if ($data === 'support:start') {
             $this->cmdSupportStart($user, $chatId);
+
+            return;
+        }
+
+        if ($data === 'referral:show') {
+            if (! $user->hasCompletedOnboarding()) {
+                $this->telegram->sendMessage($chatId, FitBotMessaging::cmdNeedOnboarding());
+
+                return;
+            }
+            $this->telegram->sendMessage($chatId, FitBotMessaging::referralInviteText($user), $this->mainMenuKeyboard());
 
             return;
         }
@@ -513,6 +532,12 @@ class FitBotService
 
     private function activateFreeClubSlotOrQueue(User $user, int $chatId): void
     {
+        if (! Schema::hasColumn('users', 'fitbot_club_until')) {
+            $this->createSupportMessage($user, 'club_lead', 'Хочу в FitBot Club, но миграция CLUB ещё не применена.');
+            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubJoinRequested(), $this->mainMenuKeyboard());
+
+            return;
+        }
         if ($user->isFitbotClubActive()) {
             $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubActiveWelcome($user, $this->rating), $this->mainMenuKeyboard());
 
@@ -524,27 +549,50 @@ class FitBotService
         if ($usedSlots < $freeSlots) {
             $user->fitbot_club_until = now()->addDays(30);
             $user->fitbot_club_founder = true;
+            $user->fitbot_club_chat_removed_at = null;
             $user->save();
-            UserSupportMessage::query()->create([
-                'user_id' => $user->id,
-                'telegram_id' => $user->telegram_id,
-                'type' => 'club_lead',
-                'body' => 'Автоактивация FitBot Club: бесплатное место #'.($usedSlots + 1).' из '.$freeSlots.'.',
-            ]);
+            $this->createSupportMessage($user, 'club_lead', 'Автоактивация FitBot Club: бесплатное место #'.($usedSlots + 1).' из '.$freeSlots.'.');
 
             $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubActivatedFree($user, $this->rating), $this->mainMenuKeyboard());
 
             return;
         }
 
-        UserSupportMessage::query()->create([
-            'user_id' => $user->id,
-            'telegram_id' => $user->telegram_id,
-            'type' => 'club_lead',
-            'body' => 'Хочу в FitBot Club, но бесплатные места уже закончились.',
-        ]);
+        $this->createSupportMessage($user, 'club_lead', 'Хочу в FitBot Club, но бесплатные места уже закончились.');
 
         $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubWaitlistRequested(), $this->mainMenuKeyboard());
+    }
+
+    private function captureReferralFromStartPayload(User $user, string $text): void
+    {
+        if (! Schema::hasColumn('users', 'referred_by_user_id') || $user->referred_by_user_id !== null) {
+            return;
+        }
+        if (! preg_match('/^\/start(?:@\w+)?\s+ref_(\d+)/i', trim($text), $m)) {
+            return;
+        }
+        $referrerId = (int) $m[1];
+        if ($referrerId <= 0 || $referrerId === (int) $user->id) {
+            return;
+        }
+        $referrer = User::query()->find($referrerId);
+        if ($referrer === null) {
+            return;
+        }
+        $rewardedCount = User::query()
+            ->where('referred_by_user_id', $referrer->id)
+            ->whereNotNull('referral_rewarded_at')
+            ->count();
+        if ($rewardedCount >= 4) {
+            return;
+        }
+
+        $user->referred_by_user_id = $referrer->id;
+        if (Schema::hasColumn('users', 'fitbot_club_until')) {
+            $user->fitbot_club_until = now()->addDays(7);
+            $user->fitbot_club_chat_removed_at = null;
+        }
+        $user->save();
     }
 
     private function clubOfferKeyboard(User $user): array
@@ -1896,6 +1944,10 @@ class FitBotService
                 $blocks[] = $gymNudge;
             }
             if ($isFirstEverCompletedCheck) {
+                $referralReward = $this->rewardReferrerAfterFirstCheck($user);
+                if ($referralReward !== null) {
+                    $blocks[] = $referralReward;
+                }
                 $blocks[] = FitBotMessaging::firstEverCheckClosing();
             }
             $weekPhoto = $this->maybeWeekPhotoNudgeBlock($user);
@@ -1921,6 +1973,51 @@ class FitBotService
         }
 
         $this->showCheckProgress($user, $chatId, $check);
+    }
+
+    private function rewardReferrerAfterFirstCheck(User $user): ?string
+    {
+        if (
+            ! Schema::hasColumn('users', 'referred_by_user_id')
+            || ! Schema::hasColumn('users', 'referral_rewarded_at')
+            || ! Schema::hasColumn('users', 'fitbot_club_until')
+            || $user->referred_by_user_id === null
+            || $user->referral_rewarded_at !== null
+        ) {
+            return null;
+        }
+
+        $referrer = User::query()->find((int) $user->referred_by_user_id);
+        if ($referrer === null) {
+            return null;
+        }
+        $rewardedCount = User::query()
+            ->where('referred_by_user_id', $referrer->id)
+            ->whereNotNull('referral_rewarded_at')
+            ->count();
+        if ($rewardedCount >= 4) {
+            $user->referral_rewarded_at = now();
+            $user->save();
+
+            return null;
+        }
+
+        $base = $referrer->fitbot_club_until !== null && $referrer->fitbot_club_until->isFuture()
+            ? $referrer->fitbot_club_until->copy()
+            : now();
+        $referrer->fitbot_club_until = $base->addDays(7);
+        $referrer->fitbot_club_chat_removed_at = null;
+        $referrer->save();
+
+        $user->referral_rewarded_at = now();
+        $user->save();
+
+        $this->telegram->sendMessage(
+            (int) $referrer->telegram_id,
+            FitBotMessaging::referralRewardForReferrer($user, $referrer)
+        );
+
+        return '🤝 За регистрацию по приглашению тебе открыт <b>CLUB на 7 дней</b>.';
     }
 
     private function tryConsumeCheckQuantityReply(User $user, int $chatId, string $text): bool
@@ -2400,6 +2497,7 @@ class FitBotService
         $kb = $this->telegram->inlineKeyboard([
             [['text' => '⚖️ Обновить вес', 'callback_data' => 'wt:start']],
             [['text' => '🤒 Болею / восстановление', 'callback_data' => 'set:recovery:menu']],
+            [['text' => '🤝 Пригласить друга', 'callback_data' => 'referral:show']],
             [['text' => '⚙️ Настройки', 'callback_data' => 'menu:settings']],
             [['text' => '✉️ Поддержка / идея / баг', 'callback_data' => 'support:start']],
             [['text' => 'ℹ️ Как устроены статусы', 'callback_data' => 'profile:status_help']],
@@ -2462,12 +2560,7 @@ class FitBotService
         }
 
         $body = Str::limit($body, 4000, '…');
-        UserSupportMessage::query()->create([
-            'user_id' => $user->id,
-            'telegram_id' => $user->telegram_id,
-            'type' => $this->supportMessageTypeFromText($body),
-            'body' => $body,
-        ]);
+        $this->createSupportMessage($user, $this->supportMessageTypeFromText($body), $body);
         Cache::forget($key);
         $this->telegram->sendMessage($chatId, FitBotMessaging::supportThanksAfterSend(), $this->mainMenuKeyboard());
 
@@ -2488,5 +2581,19 @@ class FitBotService
         }
 
         return 'support';
+    }
+
+    private function createSupportMessage(User $user, string $type, string $body): void
+    {
+        $payload = [
+            'user_id' => $user->id,
+            'telegram_id' => $user->telegram_id,
+            'body' => $body,
+        ];
+        if (Schema::hasColumn('user_support_messages', 'type')) {
+            $payload['type'] = $type;
+        }
+
+        UserSupportMessage::query()->create($payload);
     }
 }

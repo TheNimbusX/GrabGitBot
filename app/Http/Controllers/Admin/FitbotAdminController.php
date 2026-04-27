@@ -312,6 +312,7 @@ class FitbotAdminController extends Controller
             : now();
         $user->fitbot_club_until = $base->addDays($days);
         $user->fitbot_club_founder = $request->boolean('founder', (bool) $user->fitbot_club_founder);
+        $user->fitbot_club_chat_removed_at = null;
         $user->save();
 
         if ($request->boolean('notify_user')) {

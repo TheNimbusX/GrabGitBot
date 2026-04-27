@@ -50,6 +50,9 @@ class User extends Authenticatable
         'recovery_mode_started_at',
         'fitbot_club_until',
         'fitbot_club_founder',
+        'fitbot_club_chat_removed_at',
+        'referred_by_user_id',
+        'referral_rewarded_at',
         'password',
     ];
 
@@ -75,6 +78,8 @@ class User extends Authenticatable
         'recovery_mode_started_at' => 'datetime',
         'fitbot_club_until' => 'datetime',
         'fitbot_club_founder' => 'boolean',
+        'fitbot_club_chat_removed_at' => 'datetime',
+        'referral_rewarded_at' => 'datetime',
         'notify_morning' => 'boolean',
         'notify_evening' => 'boolean',
         'notify_churn' => 'boolean',
