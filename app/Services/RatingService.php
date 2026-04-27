@@ -395,13 +395,18 @@ class RatingService
     public function formatExtendedAnalyticsMessage(User $user, ?Carbon $now = null): string
     {
         $now ??= Carbon::now();
-        $from = $now->copy()->subDays(29)->startOfDay();
-        $calendarDays = 30;
+        $windowFrom = $now->copy()->subDays(29)->startOfDay();
+        $registeredFrom = $user->created_at?->copy()->startOfDay() ?? $windowFrom->copy();
+        $from = $registeredFrom->gt($windowFrom) ? $registeredFrom : $windowFrom;
+        $to = $now->copy()->startOfDay();
+        $calendarDays = (int) $from->diffInDays($to) + 1;
+        $periodTitle = $calendarDays < 30 ? 'С регистрации' : 'Последние 30 дней';
 
         /** @var Collection<int, DailyCheck> $checks30 */
         $checks30 = $user->dailyChecks()
             ->where('is_completed', true)
             ->where('check_date', '>=', $from->toDateString())
+            ->where('check_date', '<=', $to->toDateString())
             ->orderBy('check_date')
             ->get();
         $checksByDate = $checks30->keyBy(fn (DailyCheck $c) => $c->check_date->toDateString());
@@ -453,10 +458,6 @@ class RatingService
         $worst = $checks30->sortBy('total_score')->first();
         $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '-';
         $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '-';
-        $dietRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->diet_rating === CheckRating::Red->value);
-        $sleepRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->sleep_rating === CheckRating::Red->value);
-        $waterRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->water_rating === CheckRating::Red->value);
-
         $streak = $this->checkInStreakDays($user, $now);
         $todayDone = $this->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
         $streakBanner = FitBotMessaging::streakCoreBanner($streak, $todayDone);
@@ -466,7 +467,7 @@ class RatingService
 
         $lines = [
             '📈 <b>Расширенная аналитика</b>',
-            '<i>Последние 30 дней · '.$from->format('d.m').' - '.$now->format('d.m').'</i>',
+            '<i>'.$periodTitle.' · '.$from->format('d.m').' - '.$to->format('d.m').'</i>',
         ];
         if ($streakBanner !== null) {
             $lines[] = '';
@@ -478,7 +479,7 @@ class RatingService
         }
         $lines[] = '';
         $lines = array_merge($lines, [
-            '━━━ <b>Итог месяца</b>',
+            '━━━ <b>Итог периода</b>',
             '✅ Чек-инов: <b>'.$completedDays.'</b> из '.$calendarDays.' ('.$pctMarked.'%) · пропусков: <b>'.$missedDays.'</b>',
             '⭐ Баллы: <b>'.$totalPts.'</b> · средний отмеченный день: <b>'.$avgIfMarked.'</b>/'.self::MAX_DAILY_POINTS,
             '🏆 Идеальных дней: <b>'.$perfectDays.'</b> · слабых (0-3): <b>'.$lowDays.'</b>',
@@ -486,20 +487,19 @@ class RatingService
             'Пик: '.$bestStr.' · просадка: '.$worstStr,
             '',
             '━━━ <b>Оси</b>',
-            '🍽 Еда: '.$this->axisScoreSummary($checks30, 'diet').' · красные: '.$this->formatDateList($dietRedDates),
-            '😴 Сон: '.$this->axisScoreSummary($checks30, 'sleep').' · красные: '.$this->formatDateList($sleepRedDates),
-            '💧 Вода: '.$this->axisScoreSummary($checks30, 'water').' · красные: '.$this->formatDateList($waterRedDates),
+            '🍽 Еда: '.$this->axisScoreSummary($checks30, 'diet'),
+            '😴 Сон: '.$this->axisScoreSummary($checks30, 'sleep'),
+            '💧 Вода: '.$this->axisScoreSummary($checks30, 'water'),
             '',
             '━━━ <b>Движение</b>',
             '💪 Тренировки: <b>'.$workoutCounts['trained'].'</b> · '.$this->formatDateList($trainedDates),
             '😴 Отдых: <b>'.$workoutCounts['rest'].'</b> · 🤒 восстановление: <b>'.$workoutCounts['recovery'].'</b> · ❌ пропуск: <b>'.$workoutCounts['skipped'].'</b>',
             'Пропуски движения: '.$this->formatDateList($skippedWorkoutDates),
             '',
-            '━━━ <b>Календарь 30 дней</b>',
-            '<i>Е еда · С сон · Д движение · В вода · сумма</i>',
+            '━━━ <b>Календарь периода</b>',
+            '<i>еда · сон · движение · вода · сумма</i>',
         ]);
-        for ($i = 29; $i >= 0; $i--) {
-            $day = $now->copy()->subDays($i)->startOfDay();
+        for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
             /** @var DailyCheck|null $check */
             $check = $checksByDate->get($day->toDateString());
             $lines[] = $this->calendarLineForDay($day, $check);
@@ -545,23 +545,6 @@ class RatingService
         return 'ср. <b>'.$avg.'</b>/2 · 🟢'.$green.' 🟡'.$yellow.' 🔴'.$red;
     }
 
-    /**
-     * @param  Collection<int, DailyCheck>  $checks
-     * @param  callable(DailyCheck): bool  $predicate
-     * @return list<string>
-     */
-    private function ratingDates(Collection $checks, callable $predicate): array
-    {
-        $dates = [];
-        foreach ($checks as $check) {
-            if ($predicate($check)) {
-                $dates[] = $check->check_date->format('d.m');
-            }
-        }
-
-        return $dates;
-    }
-
     /** @param list<string> $dates */
     private function formatDateList(array $dates, int $limit = 8): string
     {
@@ -583,10 +566,10 @@ class RatingService
         $workout = WorkoutCheckVariant::tryFrom((string) $check->workout_variant);
 
         return $date
-            .' Е'.$this->ratingDot($check->diet_rating)
-            .' С'.$this->ratingDot($check->sleep_rating)
-            .' Д'.$this->workoutMark($workout)
-            .' В'.$this->ratingDot($check->water_rating)
+            .' еда '.$this->ratingDot($check->diet_rating)
+            .' · сон '.$this->ratingDot($check->sleep_rating)
+            .' · движение '.$this->workoutMark($workout)
+            .' · вода '.$this->ratingDot($check->water_rating)
             .' = <b>'.(int) $check->total_score.'</b>';
     }
 
