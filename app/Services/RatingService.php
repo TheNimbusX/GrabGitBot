@@ -390,61 +390,34 @@ class RatingService
     }
 
     /**
-     * Расширенная сводка: 28 дней, оси, недели, последние 7 календарных дней.
+     * Расширенная сводка: месяц как дневник чек-инов, чтобы быстро видеть провалы по осям.
      */
     public function formatExtendedAnalyticsMessage(User $user, ?Carbon $now = null): string
     {
         $now ??= Carbon::now();
-        $from28 = $now->copy()->subDays(27)->startOfDay();
+        $from = $now->copy()->subDays(29)->startOfDay();
+        $calendarDays = 30;
 
-        /** @var Collection<int, DailyCheck> $checks28 */
-        $checks28 = $user->dailyChecks()
+        /** @var Collection<int, DailyCheck> $checks30 */
+        $checks30 = $user->dailyChecks()
             ->where('is_completed', true)
-            ->where('check_date', '>=', $from28->toDateString())
+            ->where('check_date', '>=', $from->toDateString())
             ->orderBy('check_date')
             ->get();
+        $checksByDate = $checks30->keyBy(fn (DailyCheck $c) => $c->check_date->toDateString());
 
-        if ($checks28->isEmpty()) {
+        if ($checks30->isEmpty()) {
             return "📈 <b>Расширенная аналитика</b>\n\n"
                 .'Пока нет завершённых чек-инов - отметь хотя бы несколько дней, и здесь появятся цифры.';
         }
 
-        $completedDays = $checks28->count();
-        $totalPts = (int) $checks28->sum('total_score');
+        $completedDays = $checks30->count();
+        $totalPts = (int) $checks30->sum('total_score');
         $avgIfMarked = $completedDays > 0 ? round($totalPts / $completedDays, 1) : 0.0;
-        $calendarDays = 28;
         $pctMarked = (int) round(100 * $completedDays / $calendarDays);
-
-        $dimLabels = [
-            'diet' => 'питание',
-            'sleep' => 'сон',
-            'workout' => 'тренировки',
-            'water' => 'вода',
-        ];
-        $dimGetters = [
-            'diet' => fn (DailyCheck $c) => $c->diet_rating,
-            'sleep' => fn (DailyCheck $c) => $c->sleep_rating,
-            'workout' => fn (DailyCheck $c) => $c->workout_rating,
-            'water' => fn (DailyCheck $c) => $c->water_rating,
-        ];
-        $dimLines = [];
-        foreach ($dimLabels as $key => $label) {
-            $sum = 0;
-            $n = 0;
-            $getter = $dimGetters[$key];
-            foreach ($checks28 as $c) {
-                $r = $getter($c);
-                if ($r !== null) {
-                    $sum += $this->pointsForRating($r);
-                    $n++;
-                }
-            }
-            if ($n > 0) {
-                $avg = round($sum / $n, 2);
-                $dimLines[] = $label.' <b>'.$avg.'</b>/2';
-            }
-        }
-        $dimBlock = $dimLines !== [] ? implode(' · ', $dimLines) : '-';
+        $missedDays = $calendarDays - $completedDays;
+        $perfectDays = $checks30->filter(fn (DailyCheck $c) => (int) $c->total_score === self::MAX_DAILY_POINTS)->count();
+        $lowDays = $checks30->filter(fn (DailyCheck $c) => (int) $c->total_score <= 3)->count();
 
         $workoutCounts = [
             'trained' => 0,
@@ -452,28 +425,22 @@ class RatingService
             'recovery' => 0,
             'skipped' => 0,
         ];
-        foreach ($checks28 as $c) {
+        $trainedDates = [];
+        $skippedWorkoutDates = [];
+        foreach ($checks30 as $c) {
             $v = WorkoutCheckVariant::tryFrom((string) ($c->workout_variant ?? ''));
             if ($v === WorkoutCheckVariant::Trained) {
                 $workoutCounts['trained']++;
+                $trainedDates[] = $c->check_date->format('d.m');
             } elseif ($v === WorkoutCheckVariant::Rest) {
                 $workoutCounts['rest']++;
             } elseif ($v === WorkoutCheckVariant::Recovery) {
                 $workoutCounts['recovery']++;
             } elseif ($v === WorkoutCheckVariant::Skipped) {
                 $workoutCounts['skipped']++;
+                $skippedWorkoutDates[] = $c->check_date->format('d.m');
             }
         }
-
-        $last7Parts = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $d = $now->copy()->subDays($i)->startOfDay();
-            $label = $d->format('d.m');
-            $has = $this->hasCompletedCheckOnDate($user, $d);
-            $sc = $has ? $this->scoreForDay($user, $d) : null;
-            $last7Parts[] = $label.':'.($sc !== null ? '<b>'.$sc.'</b>' : '-');
-        }
-        $last7Line = implode(' ', $last7Parts);
 
         $wStart = $now->copy()->startOfWeek();
         $wEnd = $now->copy()->endOfWeek();
@@ -482,10 +449,13 @@ class RatingService
         $thisWeekPts = $this->scoreForPeriod($user, $wStart, $wEnd);
         $lastWeekPts = $this->scoreForPeriod($user, $lwStart, $lwEnd);
 
-        $best = $checks28->sortByDesc('total_score')->first();
-        $worst = $checks28->sortBy('total_score')->first();
+        $best = $checks30->sortByDesc('total_score')->first();
+        $worst = $checks30->sortBy('total_score')->first();
         $bestStr = $best ? $best->check_date->format('d.m').': <b>'.$best->total_score.'</b>' : '-';
         $worstStr = $worst ? $worst->check_date->format('d.m').': <b>'.$worst->total_score.'</b>' : '-';
+        $dietRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->diet_rating === CheckRating::Red->value);
+        $sleepRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->sleep_rating === CheckRating::Red->value);
+        $waterRedDates = $this->ratingDates($checks30, fn (DailyCheck $c) => $c->water_rating === CheckRating::Red->value);
 
         $streak = $this->checkInStreakDays($user, $now);
         $todayDone = $this->hasCompletedCheckOnDate($user, $now->copy()->startOfDay());
@@ -496,7 +466,7 @@ class RatingService
 
         $lines = [
             '📈 <b>Расширенная аналитика</b>',
-            '<i>28 дней · по завершённым чек-инам</i>',
+            '<i>Последние 30 дней · '.$from->format('d.m').' - '.$now->format('d.m').'</i>',
         ];
         if ($streakBanner !== null) {
             $lines[] = '';
@@ -508,30 +478,132 @@ class RatingService
         }
         $lines[] = '';
         $lines = array_merge($lines, [
-            '✅ Отмечено дней: <b>'.$completedDays.'</b> из '.$calendarDays.' ('.$pctMarked.'%)',
-            '⭐ Баллов за период: <b>'.$totalPts.'</b> · в среднем на отмеченный день: <b>'.$avgIfMarked.'</b>/'.self::MAX_DAILY_POINTS,
+            '━━━ <b>Итог месяца</b>',
+            '✅ Чек-инов: <b>'.$completedDays.'</b> из '.$calendarDays.' ('.$pctMarked.'%) · пропусков: <b>'.$missedDays.'</b>',
+            '⭐ Баллы: <b>'.$totalPts.'</b> · средний отмеченный день: <b>'.$avgIfMarked.'</b>/'.self::MAX_DAILY_POINTS,
+            '🏆 Идеальных дней: <b>'.$perfectDays.'</b> · слабых (0-3): <b>'.$lowDays.'</b>',
+            '📆 Неделя: эта <b>'.$thisWeekPts.'</b> · прошлая <b>'.$lastWeekPts.'</b>',
+            'Пик: '.$bestStr.' · просадка: '.$worstStr,
             '',
-            '<b>Последние 7 дней</b> (день → баллы)',
-            $last7Line,
+            '━━━ <b>Оси</b>',
+            '🍽 Еда: '.$this->axisScoreSummary($checks30, 'diet').' · красные: '.$this->formatDateList($dietRedDates),
+            '😴 Сон: '.$this->axisScoreSummary($checks30, 'sleep').' · красные: '.$this->formatDateList($sleepRedDates),
+            '💧 Вода: '.$this->axisScoreSummary($checks30, 'water').' · красные: '.$this->formatDateList($waterRedDates),
             '',
-            '<b>Оси за 28 дней</b> (средн. баллов за ось, макс. 2)',
-            $dimBlock,
+            '━━━ <b>Движение</b>',
+            '💪 Тренировки: <b>'.$workoutCounts['trained'].'</b> · '.$this->formatDateList($trainedDates),
+            '😴 Отдых: <b>'.$workoutCounts['rest'].'</b> · 🤒 восстановление: <b>'.$workoutCounts['recovery'].'</b> · ❌ пропуск: <b>'.$workoutCounts['skipped'].'</b>',
+            'Пропуски движения: '.$this->formatDateList($skippedWorkoutDates),
             '',
-            '💪 <b>Движение</b> (дней): тренировка '.$workoutCounts['trained']
-                .' · отдых '.$workoutCounts['rest']
-                .' · восстановление '.$workoutCounts['recovery']
-                .' · пропуск '.$workoutCounts['skipped'],
-            '',
-            '<b>Недели (баллы)</b>',
-            'Эта: <b>'.$thisWeekPts.'</b> · прошлая: <b>'.$lastWeekPts.'</b>',
-            '',
-            '<b>Пики за 28 дней</b>',
-            'Лучший: '.$bestStr.' · слабее всего: '.$worstStr,
+            '━━━ <b>Календарь 30 дней</b>',
+            '<i>Е еда · С сон · Д движение · В вода · сумма</i>',
         ]);
+        for ($i = 29; $i >= 0; $i--) {
+            $day = $now->copy()->subDays($i)->startOfDay();
+            /** @var DailyCheck|null $check */
+            $check = $checksByDate->get($day->toDateString());
+            $lines[] = $this->calendarLineForDay($day, $check);
+        }
 
         $lines = array_merge($lines, $this->extendedAnalyticsWeightLines($user));
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param  Collection<int, DailyCheck>  $checks
+     */
+    private function axisScoreSummary(Collection $checks, string $axis): string
+    {
+        $getter = match ($axis) {
+            'diet' => fn (DailyCheck $c) => $c->diet_rating,
+            'sleep' => fn (DailyCheck $c) => $c->sleep_rating,
+            'workout' => fn (DailyCheck $c) => $c->workout_rating,
+            'water' => fn (DailyCheck $c) => $c->water_rating,
+            default => fn (DailyCheck $c) => null,
+        };
+        $green = 0;
+        $yellow = 0;
+        $red = 0;
+        $sum = 0;
+        foreach ($checks as $check) {
+            $rating = CheckRating::tryFrom((string) $getter($check));
+            if ($rating === null) {
+                continue;
+            }
+            $sum += $rating->points();
+            if ($rating === CheckRating::Green) {
+                $green++;
+            } elseif ($rating === CheckRating::Yellow) {
+                $yellow++;
+            } else {
+                $red++;
+            }
+        }
+        $avg = $checks->isEmpty() ? 0 : round($sum / max(1, $checks->count()), 1);
+
+        return 'ср. <b>'.$avg.'</b>/2 · 🟢'.$green.' 🟡'.$yellow.' 🔴'.$red;
+    }
+
+    /**
+     * @param  Collection<int, DailyCheck>  $checks
+     * @param  callable(DailyCheck): bool  $predicate
+     * @return list<string>
+     */
+    private function ratingDates(Collection $checks, callable $predicate): array
+    {
+        $dates = [];
+        foreach ($checks as $check) {
+            if ($predicate($check)) {
+                $dates[] = $check->check_date->format('d.m');
+            }
+        }
+
+        return $dates;
+    }
+
+    /** @param list<string> $dates */
+    private function formatDateList(array $dates, int $limit = 8): string
+    {
+        if ($dates === []) {
+            return '—';
+        }
+        $shown = array_slice($dates, 0, $limit);
+        $suffix = count($dates) > $limit ? ' +'.(count($dates) - $limit) : '';
+
+        return implode(', ', $shown).$suffix;
+    }
+
+    private function calendarLineForDay(Carbon $day, ?DailyCheck $check): string
+    {
+        $date = '<code>'.$day->format('d.m').'</code>';
+        if ($check === null) {
+            return $date.' — чек-ин не закрыт';
+        }
+        $workout = WorkoutCheckVariant::tryFrom((string) $check->workout_variant);
+
+        return $date
+            .' Е'.$this->ratingDot($check->diet_rating)
+            .' С'.$this->ratingDot($check->sleep_rating)
+            .' Д'.$this->workoutMark($workout)
+            .' В'.$this->ratingDot($check->water_rating)
+            .' = <b>'.(int) $check->total_score.'</b>';
+    }
+
+    private function ratingDot(?string $rating): string
+    {
+        return CheckRating::tryFrom((string) $rating)?->emoji() ?? '⚪️';
+    }
+
+    private function workoutMark(?WorkoutCheckVariant $variant): string
+    {
+        return match ($variant) {
+            WorkoutCheckVariant::Trained => '💪',
+            WorkoutCheckVariant::Rest => '😴',
+            WorkoutCheckVariant::Recovery => '🤒',
+            WorkoutCheckVariant::Skipped => '❌',
+            default => '⚪️',
+        };
     }
 
     /** @return list<string> */
