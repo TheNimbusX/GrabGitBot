@@ -10,6 +10,7 @@ class UserSupportMessage extends Model
     protected $fillable = [
         'user_id',
         'telegram_id',
+        'type',
         'body',
         'read_at',
     ];

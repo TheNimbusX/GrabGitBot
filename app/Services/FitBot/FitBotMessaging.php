@@ -364,7 +364,7 @@ final class FitBotMessaging
 
     public static function unknownCommand(): string
     {
-        return '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /club, /settings, /profile';
+        return '🤔 Неизвестная команда. Доступны: /start, /check, /cancel, /rating, /plan, /analytics, /club, /profile';
     }
 
     public static function proAiMenuHint(): string
@@ -382,26 +382,26 @@ final class FitBotMessaging
         $active = $user?->isFitbotClubActive() ?? false;
         if ($active) {
             return '🏁 <b>FitBot Club активен</b>'."\n\n"
-                .'Ты в режиме 30 дней контроля: чек-ины, вес, weekly-отчёт, полная аналитика, задания и закрытый чат.'
+                .'Ты в режиме 30 дней контроля: бот держит учёт, чат держит в процессе, отчёт показывает слабое место.'
                 ."\n\n"
-                .'Открывай weekly-отчёт раз в неделю и смотри, что реально двигает похудение, а что тянет назад.';
+                .'Weekly-отчёт приходит по понедельникам. Сегодня просто не пропади: вечером закрой чек-ин.';
         }
 
         return '🏁 <b>FITBOT CLUB</b>'."\n"
-            .'<b>30 дней контроля похудения без срывов</b>'."\n\n"
+            .'<b>30 дней не пропадаешь</b>'."\n\n"
+            .'Бот контролирует. Чат держит. Отчёт показывает слабое место.'
+            ."\n\n"
             .'Для тех, кто уже начинал “с понедельника”, держался пару дней, потом выпадал и снова начинал заново.'
             ."\n\n"
-            .'В бесплатной версии остаются база: чек-ин, рейтинг, план, вес и напоминания.'
+            .'В бесплатной версии остаются база: чек-ин, прогресс, план, вес и напоминания.'
             ."\n\n"
-            .'В <b>CLUB</b> добавляем контроль, который держит тебя в процессе:'
+            .'В <b>CLUB</b>:'
             ."\n"
-            .'🔥 закрытый чат: не варишься один'."\n"
-            .'✅ ежедневные мини-задания: еда, вода, сон, движение'."\n"
-            .'📊 weekly-отчёт: вес, чек-ины, слабое место и план на неделю'."\n"
-            .'📈 полная аналитика за 30 дней: календарь, вес, пропуски, динамика'."\n"
-            .'🍽 простые идеи рационов, перекусов и “что делать, если сорвался”'."\n"
-            .'🆘 SOS-поддержка после срыва, болезни или отката'."\n"
-            .'🏆 мини-челленджи на серии чек-инов'
+            .'🔥 закрытый чат - чтобы не вариться одному'."\n"
+            .'🎯 фокус дня - один простой шаг, без “марафонной” суеты'."\n"
+            .'📊 weekly-отчёт - вес, чек-ины, слабое место и план на неделю'."\n"
+            .'📈 отчёт 30 дней - календарь, вес, пропуски, динамика'."\n"
+            .'🆘 помощь после срыва, болезни или отката'
             ."\n\n"
             .'Beta-набор: <b>первые 30 мест бесплатно</b>.'."\n"
             .'Цена далее: <b>до 390 ₽ за 30 дней</b>.';
@@ -416,17 +416,57 @@ final class FitBotMessaging
         };
 
         return '🏁 <b>'.$featureLabel.'</b> - часть FitBot Club.'."\n\n"
-            .'Бесплатно бот помогает держать привычку: чек-ин, рейтинг, план, вес и базовые напоминания.'
+            .'Бесплатно бот помогает держать привычку: чек-ин, прогресс, план, вес и базовые напоминания.'
             ."\n\n"
-            .'CLUB - это закрытый чат, задания, weekly-отчёты и поддержка, чтобы не пропасть после пары плохих дней.'
+            .'CLUB - это закрытый чат, фокус дня, weekly-отчёты и поддержка, чтобы не пропасть после пары плохих дней.'
             ."\n\n"
-            .'Beta price: <b>до 390 ₽ за 30 дней</b>.';
+            .'Первые 30 мест сейчас бесплатно.';
     }
 
     public static function fitbotClubJoinRequested(): string
     {
-        return '✅ Заявка в beta-набор FitBot Club отправлена.'."\n\n"
-            .'Админ увидит её в поддержке и напишет условия входа. Пока продолжай чек-ины: это база, на которой строится весь контроль.';
+        return '✅ Заявка в FitBot Club отправлена.'."\n\n"
+            .'Админ увидит её в поддержке. Пока продолжай чек-ины: это база, на которой строится весь контроль.';
+    }
+
+    public static function fitbotClubActivatedFree(User $user, RatingService $rating): string
+    {
+        return '🏁 <b>Ты в FitBot Club</b>'."\n\n"
+            .'Забрал бесплатное место из первых 30. Доступ открыт до <b>'.$user->fitbot_club_until?->format('d.m.Y').'</b>.'
+            ."\n\n"
+            .self::fitbotClubTodayAction($user, $rating)
+            ."\n\n"
+            .'Закрытый чат: '.self::fitbotClubInviteUrl()
+            ."\n\n"
+            .'Важно: ссылка приглашения технически может пересылаться. Если в чате включена ручная модерация входа, лишних людей можно не принимать.';
+    }
+
+    public static function fitbotClubActiveWelcome(User $user, RatingService $rating): string
+    {
+        return '🏁 <b>FitBot Club уже активен</b> до <b>'.$user->fitbot_club_until?->format('d.m.Y').'</b>.'
+            ."\n\n"
+            .self::fitbotClubTodayAction($user, $rating)
+            ."\n\n"
+            .'Закрытый чат: '.self::fitbotClubInviteUrl();
+    }
+
+    public static function fitbotClubWaitlistRequested(): string
+    {
+        return '🏁 Бесплатные 30 мест уже закончились, но заявку я передал админу.'."\n\n"
+            .'Пока продолжай чек-ины. Если откроется место или стартует следующий набор, тебе напишут.';
+    }
+
+    public static function fitbotClubTodayAction(User $user, RatingService $rating): string
+    {
+        return '🎯 <b>Что делать сегодня</b>'."\n"
+            .'1. Вечером закрой <b>Чек-ин</b>.'."\n"
+            .'2. Держи один фокус: '.$rating->weeklyFocusContentHtml($user).'.'."\n"
+            .'3. Если день сорвался - всё равно отметь факт, не исчезай.';
+    }
+
+    private static function fitbotClubInviteUrl(): string
+    {
+        return (string) config('fitbot.club_invite_url', 'https://t.me/+3o_GirDWRE9lNDRi');
     }
 
     public static function weeklyFocusSavedAfterText(): string
@@ -436,8 +476,8 @@ final class FitBotMessaging
 
     public static function mainMenuFallback(): string
     {
-        return '👇 Кнопки внизу или команды: /check, /cancel, /rating, /plan, /analytics, /club, /settings, /profile. '
-            .'Анкета и статус — <b>👤 Профиль</b>. Баг или идея — <b>✉️ Написать в поддержку</b>.';
+        return '👇 Кнопки внизу или команды: /check, /rating, /plan, /analytics, /club, /profile. '
+            .'Настройки и поддержка теперь внутри <b>👤 Профиль</b>.';
     }
 
     public static function supportIntroPrompt(): string
@@ -907,7 +947,7 @@ final class FitBotMessaging
         return '👋 <b>Привет! Я FitBot</b>'."\n\n"
             .'Помогаю не терять нить дисциплины:'."\n\n"
             .'📝 <b>Чек-ин</b> - питание, сон, движение, вода (с баллами)'."\n"
-            .'📊 <b>Рейтинг</b> - серия дней и подсказки'."\n"
+            .'📊 <b>Прогресс</b> - серия дней и подсказки'."\n"
             .'📋 <b>План</b> - цели по сну/воде или полный расчёт от меня'."\n"
             .'⏰ <b>Напоминания</b> - утром и вечером'."\n\n"
             .'Жми <b>«Продолжить»</b> - выбери режим и пройди короткую настройку.';

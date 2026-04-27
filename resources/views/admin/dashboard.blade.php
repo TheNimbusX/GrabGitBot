@@ -903,6 +903,12 @@
             'new' => 'Новая регистрация (≤7 дн с /start)',
             'onboarding' => 'В онбординге',
         ];
+        $supportTypeLabels = [
+            'support' => 'поддержка',
+            'club_lead' => 'club',
+            'bug' => 'баг',
+            'feedback' => 'идея',
+        ];
         $engPct = $stats['engagement_completed_7d_pct'];
         $funnelMax = 1;
         foreach ($onboardingFunnel as $f) {
@@ -1163,6 +1169,9 @@
                                 <thead>
                                     <tr>
                                         <th>Статус</th>
+                                        @if ($supportHasType)
+                                            <th>Тип</th>
+                                        @endif
                                         <th>Когда</th>
                                         <th>User</th>
                                         <th>Telegram</th>
@@ -1187,6 +1196,13 @@
                                                     <span class="no">—</span>
                                                 @endif
                                             </td>
+                                            @if ($supportHasType)
+                                                <td data-label="Тип">
+                                                    <span class="support-badge {{ $sm->type === 'club_lead' ? 'support-badge--new' : 'support-badge--done' }}">
+                                                        {{ $supportTypeLabels[$sm->type] ?? $sm->type }}
+                                                    </span>
+                                                </td>
+                                            @endif
                                             <td class="no num" style="white-space:nowrap;" data-label="Когда">{{ $sm->created_at?->format('Y-m-d H:i') }}</td>
                                             <td class="num" data-label="User">
                                                 @if ($su)

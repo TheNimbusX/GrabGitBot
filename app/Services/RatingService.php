@@ -259,7 +259,7 @@ class RatingService
         );
 
         $lines = [
-            '📊 <b>Твой рейтинг дисциплины</b>',
+            '📊 <b>Твой прогресс</b>',
         ];
         if ($streakBanner !== null) {
             $lines[] = '';
@@ -305,7 +305,7 @@ class RatingService
         $pctMarked = (int) round(100 * $completedDays / max(1, $periodDays));
 
         $lines = [
-            '📈 <b>Бесплатная аналитика</b>',
+            '📈 <b>Отчёт 7 дней</b>',
             '<i>Последние 7 дней · '.$from->format('d.m').' - '.$to->format('d.m').'</i>',
             '',
             '✅ Чек-инов: <b>'.$completedDays.'</b> из '.$periodDays.' ('.$pctMarked.'%)',
@@ -313,10 +313,10 @@ class RatingService
             '',
             ...$this->weakAreasFeedback($user, 7, $now),
             '',
-            '🏁 <b>В клубе открывается полный контроль:</b>',
-            '• календарь и вес за 30 дней',
-            '• weekly-отчёт со слабым местом недели',
-            '• закрытый чат и задания, чтобы не пропасть после срыва',
+            '🏁 <b>В CLUB открывается:</b>',
+            '• отчёт 30 дней: календарь, вес, пропуски',
+            '• weekly-отчёт: слабое место и план недели',
+            '• закрытый чат и фокус дня, чтобы не пропасть',
         ];
 
         return implode("\n", $lines);

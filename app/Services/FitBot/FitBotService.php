@@ -263,6 +263,12 @@ class FitBotService
             return;
         }
 
+        if ($data === 'support:start') {
+            $this->cmdSupportStart($user, $chatId);
+
+            return;
+        }
+
         if ($data === 'menu:plan') {
             $this->cmdPlan($user, $chatId);
 
@@ -501,27 +507,57 @@ class FitBotService
         }
 
         if ($data === 'club:join') {
+            $this->activateFreeClubSlotOrQueue($user, $chatId);
+        }
+    }
+
+    private function activateFreeClubSlotOrQueue(User $user, int $chatId): void
+    {
+        if ($user->isFitbotClubActive()) {
+            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubActiveWelcome($user, $this->rating), $this->mainMenuKeyboard());
+
+            return;
+        }
+
+        $freeSlots = (int) config('fitbot.club_free_slots', 30);
+        $usedSlots = User::query()->where('fitbot_club_founder', true)->count();
+        if ($usedSlots < $freeSlots) {
+            $user->fitbot_club_until = now()->addDays(30);
+            $user->fitbot_club_founder = true;
+            $user->save();
             UserSupportMessage::query()->create([
                 'user_id' => $user->id,
                 'telegram_id' => $user->telegram_id,
-                'body' => 'Хочу в beta-набор FitBot Club: 30 дней контроля похудения без срывов.',
+                'type' => 'club_lead',
+                'body' => 'Автоактивация FitBot Club: бесплатное место #'.($usedSlots + 1).' из '.$freeSlots.'.',
             ]);
 
-            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubJoinRequested(), $this->mainMenuKeyboard());
+            $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubActivatedFree($user, $this->rating), $this->mainMenuKeyboard());
+
+            return;
         }
+
+        UserSupportMessage::query()->create([
+            'user_id' => $user->id,
+            'telegram_id' => $user->telegram_id,
+            'type' => 'club_lead',
+            'body' => 'Хочу в FitBot Club, но бесплатные места уже закончились.',
+        ]);
+
+        $this->telegram->sendMessage($chatId, FitBotMessaging::fitbotClubWaitlistRequested(), $this->mainMenuKeyboard());
     }
 
     private function clubOfferKeyboard(User $user): array
     {
         $rows = [
-            [['text' => 'Хочу в beta-набор', 'callback_data' => 'club:join']],
+            [['text' => 'Забрать бесплатное место', 'callback_data' => 'club:join']],
             [['text' => 'Weekly-отчёт клуба', 'callback_data' => 'club:weekly']],
-            [['text' => 'Полная аналитика 30 дней', 'callback_data' => 'club:analytics']],
+            [['text' => 'Отчёт 30 дней', 'callback_data' => 'club:analytics']],
         ];
         if ($user->isFitbotClubActive()) {
             $rows = [
                 [['text' => 'Weekly-отчёт клуба', 'callback_data' => 'club:weekly']],
-                [['text' => 'Полная аналитика 30 дней', 'callback_data' => 'club:analytics']],
+                [['text' => 'Отчёт 30 дней', 'callback_data' => 'club:analytics']],
             ];
         }
 
@@ -2078,23 +2114,8 @@ class FitBotService
             $parts[] = '⚠️ '.$error;
             $parts[] = '';
         }
-        $streak = $this->rating->checkInStreakDays($user);
-        $streakBanner = FitBotMessaging::streakCoreBanner($streak, false);
-        if ($streakBanner !== null) {
-            $parts[] = $streakBanner;
-            $parts[] = '';
-        }
         $parts[] = '<b>Чек-ин за сегодня</b>';
         $parts = array_merge($parts, $this->checkProgressStatusLines($check));
-        if ($check->diet_rating && $check->sleep_rating && ! $check->workout_rating) {
-            $gymNudge = FitBotMessaging::workoutSkippedStreakNudge(
-                $this->rating->consecutiveSkippedWorkoutDays($user)
-            );
-            if ($gymNudge !== null) {
-                $parts[] = '';
-                $parts[] = $gymNudge;
-            }
-        }
         $parts[] = '';
         $parts[] = $this->checkProgressCurrentQuestionText($user, $check);
 
@@ -2343,10 +2364,10 @@ class FitBotService
     {
         return match (trim($text)) {
             'Чек-ин' => 'check',
-            'Рейтинг' => 'rating',
+            'Прогресс', 'Рейтинг' => 'rating',
             '📋 План', 'План' => 'plan',
             '⚙️ Настройки', 'Настройки' => 'settings',
-            '📈 Расширенная аналитика' => 'analytics',
+            '📈 Отчёт', 'Отчёт', '📈 Расширенная аналитика' => 'analytics',
             '🏁 CLUB', '🏁 Клуб 30 дней', 'CLUB', 'Клуб' => 'club',
             '✉️ Написать в поддержку' => 'support',
             '👤 Профиль' => 'profile',
@@ -2379,6 +2400,8 @@ class FitBotService
         $kb = $this->telegram->inlineKeyboard([
             [['text' => '⚖️ Обновить вес', 'callback_data' => 'wt:start']],
             [['text' => '🤒 Болею / восстановление', 'callback_data' => 'set:recovery:menu']],
+            [['text' => '⚙️ Настройки', 'callback_data' => 'menu:settings']],
+            [['text' => '✉️ Поддержка / идея / баг', 'callback_data' => 'support:start']],
             [['text' => 'ℹ️ Как устроены статусы', 'callback_data' => 'profile:status_help']],
         ]);
         $this->telegram->sendMessage($chatId, $text, $kb);
@@ -2442,11 +2465,28 @@ class FitBotService
         UserSupportMessage::query()->create([
             'user_id' => $user->id,
             'telegram_id' => $user->telegram_id,
+            'type' => $this->supportMessageTypeFromText($body),
             'body' => $body,
         ]);
         Cache::forget($key);
         $this->telegram->sendMessage($chatId, FitBotMessaging::supportThanksAfterSend(), $this->mainMenuKeyboard());
 
         return true;
+    }
+
+    private function supportMessageTypeFromText(string $body): string
+    {
+        $t = Str::lower($body);
+        if (str_contains($t, 'club') || str_contains($t, 'клуб')) {
+            return 'club_lead';
+        }
+        if (str_contains($t, 'баг') || str_contains($t, 'ошиб') || str_contains($t, 'слом')) {
+            return 'bug';
+        }
+        if (str_contains($t, 'иде') || str_contains($t, 'предлож')) {
+            return 'feedback';
+        }
+
+        return 'support';
     }
 }

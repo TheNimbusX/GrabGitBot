@@ -185,9 +185,11 @@ class FitbotAdminDashboardService
 
         $supportTableExists = Schema::hasTable('user_support_messages');
         $supportHasReadAt = $supportTableExists && Schema::hasColumn('user_support_messages', 'read_at');
+        $supportHasType = $supportTableExists && Schema::hasColumn('user_support_messages', 'type');
         $supportMessages = $supportTableExists
             ? UserSupportMessage::query()
                 ->with(['user:id,first_name,username,telegram_id'])
+                ->when($supportHasType, fn ($q) => $q->orderByRaw("case type when 'club_lead' then 0 when 'bug' then 1 when 'feedback' then 2 else 3 end"))
                 ->when($supportHasReadAt, fn ($q) => $q->orderByRaw('read_at is null desc'))
                 ->orderByDesc('id')
                 ->limit(100)
@@ -214,6 +216,7 @@ class FitbotAdminDashboardService
             'supportMessagesTotal' => $supportMessagesTotal,
             'supportUnreadCount' => $supportUnreadCount,
             'supportHasReadAt' => $supportHasReadAt,
+            'supportHasType' => $supportHasType,
             'clubColumnExists' => $clubColumnExists,
         ];
     }
